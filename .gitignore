@@ -1,0 +1,13 @@
+*.pyc
+
+__pycache__/
+output/
+.venv/
+.idea/
+
+logs/*
+!logs/.gitkeep
+
+.env
+.DS_Store
+report.html
