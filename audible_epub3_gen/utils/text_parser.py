@@ -1,0 +1,144 @@
+import logging
+import re
+import unicodedata
+
+from audible_epub3_gen.utils import logging_setup
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
+
+DELIMITERS=set(".?!,;，？！。；")
+CLOSING_PUNCTUATION = set('\'"’”」』]')
+
+ABBRS_NON_TERMINAL = set(["Mr.", "Mrs.", "Ms.", "Dr.", "Prof."])
+ABBRS_MAY_TERMINAL = set(["U.S.", "U.S.A.", "U.K.", "U.N.", "Inc.", "Ltd."])
+ABBREVIATIONS = ABBRS_NON_TERMINAL | ABBRS_MAY_TERMINAL
+
+def replace_non_terminal_dot(text: str, replacement: str = "_DOT_") -> str:
+    """Replaces non-terminal dots in the text with a specified replacement string.
+    
+    Args:
+        text (str): The input text.
+        replacement (str): The string to replace non-terminal dots with.
+        
+    Returns:
+        str: The modified text with non-terminal dots replaced.
+    """
+    if not text:
+        logger.debug("Input text is empty, returning as is.")
+        return text
+    
+    # 替换数字序列中的点
+    while re.search(r'\d+\.\d+', text): # 只要还存在 "数字.数字" 模式就继续
+        text = re.sub(r'(\d+)\.(\d+)', fr'\1{replacement}\2', text)
+    logger.debug(f"Replaced numeric dots: \n{text}")
+
+    def _abbr_replacer(match):
+        total, abbr, next_char = match.group(0), match.group(1), match.group(2)
+        suffix = total[len(abbr):]
+
+        replaced_abbr = abbr.replace('.', replacement) if abbr in ABBRS_NON_TERMINAL else abbr[:-1].replace('.', replacement) + abbr[-1]
+        
+        if next_char is None or next_char in CLOSING_PUNCTUATION:
+            replaced_abbr = abbr[:-1].replace('.', replacement) + abbr[-1]
+        elif next_char.islower() and abbr in ABBRS_MAY_TERMINAL:
+            replaced_abbr = abbr.replace('.', replacement)
+        
+        logger.debug(f"match: {total}, abbr: {abbr}, next_char: {next_char}, replaced_abbr: {replaced_abbr}")        
+        return replaced_abbr + suffix
+        
+    # abbr_pattern = r"\b(' + '|'.join(re.escape(abbr) for abbr in ABBREVIATIONS) + r')\s*(\S)?"
+    abbr_pattern = r'(' + '|'.join(re.escape(abbr) for abbr in ABBREVIATIONS) + r')(?=\s*(\S)?)'
+    text = re.sub(abbr_pattern, _abbr_replacer, text)
+    # text = reg.sub(lambda m: m.group(0).replace('.', replacement), text)
+    logger.debug(f"Replaced common abbreviations dots: \n{text}")
+    
+    return text
+
+
+def restore_non_terminal_dot(text: str, replacement: str = "_DOT_") -> str:
+    """Restores dots in the text that were replaced by the specified replacement string.
+    
+    Args:
+        text (str): The input text with replaced dots.
+        replacement (str): The string that was used to replace dots.
+        
+    Returns:
+        str: The modified text with dots restored.
+    """
+    return text.replace(replacement, '.')
+
+
+def segment_text_by_re(text: str) -> list:
+    """Segments text into sentences based on regular expressions.
+    根据正则表达式对文本进行分句，并保留分隔符以及原始空格。
+    规则包括:
+    1. 西文 delimiters: .?!,;:
+        - 数字和缩写的西文句号不应分句，比如 "v1.2.3" 或 "Dr. Smith"
+    2. 中文 delimiters: 。？！，；：
+    3. 连续的标点符号视为一个分句点
+    4. 保留原有空格和换行符
+    """
+    if not text.strip():
+        return [text]
+    text = replace_non_terminal_dot(text)
+
+    reg_d = re.escape("".join(sorted(DELIMITERS)))
+    reg_q = re.escape("".join(sorted(CLOSING_PUNCTUATION)))
+    # split_pattern = r"([{d}][{q}])|([{d}])".format(d=reg_d, q=reg_q)
+    split_pattern = r"(?<=[{d}])([{q}]?)".format(d=reg_d, q=reg_q)
+    logger.debug(f"Using split pattern: {split_pattern}")
+
+    raw_fragments = re.split(split_pattern, text)
+    logger.debug(f"Segmented text into {len(raw_fragments)} raw fragments: \n{raw_fragments}")
+    
+    res_fragments = []
+    for fragment in raw_fragments:
+        if not fragment:  # ignore empty fragment
+            continue
+        fragment = restore_non_terminal_dot(fragment)
+        
+        is_delimiter_or_quote = len(fragment) == 1 and fragment in (DELIMITERS | CLOSING_PUNCTUATION)
+        if is_delimiter_or_quote and res_fragments:
+            # 如果当前片段是分隔符且上一个片段已经存在，则合并当前分隔符
+            res_fragments[-1] += fragment
+        else:
+            res_fragments.append(fragment)
+    
+    logger.debug(f"Segmented text into {len(res_fragments)} final fragments. \n{res_fragments}")
+    return [f for f in res_fragments]
+
+
+def is_readable(text: str) -> bool:
+    """
+    Checks if the text contains any readable characters (letters or numbers), supporting multiple languages.
+
+    Args:
+        text (str): The input text.
+
+    Returns:
+        bool: True if the text contains at least one readable character, False otherwise.
+    """
+    for ch in text:
+        category = unicodedata.category(ch)
+        if category.startswith(("L", "N")):
+            return True
+    return False
+
+
+if __name__ == "__main__":
+    from datetime import datetime
+    # Example usage
+
+    sample_text = "Dr. Smith went to the lab at 3.14 PM. Mr. Wang said the project version is 1.2.3. Call U.S. It's from U.S. Mr. Wang doesn't like it."
+    modified_text = replace_non_terminal_dot(sample_text)
+    print(modified_text)  # Output: "Dr_DOT_ Smith went to the lab at 3_DOT_14 PM. The version is 1_DOT_2_DOT_3."
+    print(restore_non_terminal_dot(modified_text))  # Output: "Dr. Smith went to the lab at 3.14 PM. The version is 1.2.3."
+
+    # text = ' "Oh! This is a test...""It\'s so hard!"他说。Another sentence! 比如 "v1.12.3" 或 "Dr. Smith"? '
+    # start = datetime.now()
+    # segments = segment_text_by_re(text)
+    # end = datetime.now()
+    # print(f"Segmented {len(segments)} sentences in {end - start} seconds.")
+    # for i, segment in enumerate(segments, start=1):
+    #     print(f"Segment {i}: 【{segment}】")

@@ -3,7 +3,9 @@
 __pycache__/
 output/
 .venv/
+.venv_*/
 .idea/
+.vscode/
 
 logs/*
 !logs/.gitkeep
