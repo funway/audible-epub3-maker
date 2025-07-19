@@ -30,11 +30,64 @@ def wrap_text_in_tag(soup: BeautifulSoup, text: str, wrapping_tag: str = "span",
     Returns:
         Tag: The newly created tag containing the text.
     """
+    assert isinstance(soup, BeautifulSoup), "soup must be a BeautifulSoup instance"
     tag = soup.new_tag(name=wrapping_tag, attrs=attrs, string=text)
     return tag
 
 
-def html_text_segment(html_str: str, wrapping_tag: str = "span", id_prefix="f") -> str:
+def _segment_node(soup: BeautifulSoup, node: Tag, wrapping_tag: str = "span") -> None:
+    """
+    Recursively processes an HTML node, segmenting its text content into readable fragments and wrapping each fragment in a new tag.
+    For each child node:
+        - NavigableString children are split into fragments, which are either wrapped in a tag or kept as-is based on readability.
+        - Tag children are processed recursively.
+        - Other types of children are preserved.
+    The node's contents are replaced with the newly processed children.
+    """
+    assert isinstance(soup, BeautifulSoup), "soup must be a BeautifulSoup instance"
+    assert isinstance(node, Tag), "node must be a Tag instance"
+    logger.debug(f"Processing Node: {get_hierarchy_name(node)}")
+    logger.debug(f"{get_hierarchy_name(node)}'s original contents [{len(node.contents)}]: {node.contents}")
+    new_contents = []
+
+    for child in node.contents:
+        if type(child) is NavigableString:
+            text = str(child)
+            if text.strip():
+                logger.debug(f"  Handle NavigableString:【{text[:10]}{' ...' if len(text) > 10 else ''}】")
+                # 对文本进行分句，每个分句包裹到一个新的 wrap_tag 标签中，然后加入到 new_contents
+                fragments = segment_text_by_re(text)
+                for fragment in fragments:
+                    if is_readable(fragment):
+                        # append as a new tag
+                        new_tag = wrap_text_in_tag(soup, fragment)
+                        new_contents.append(new_tag)
+                    else:
+                        # append as NavigableString
+                        new_contents.append(fragment)
+            else:
+                logger.debug("  Keep empty NavigableString child")
+                new_contents.append(child)  # 保留空白的 NavigableString
+        elif isinstance(child, Tag):
+            logger.debug(f"  Handle Tag: {get_hierarchy_name(child)}")
+            _segment_node(soup, child, wrapping_tag)
+            new_contents.append(child)  # don't forget processed child
+        else:
+            logger.debug(f"  Keep unknown type child: {type(child)}")
+            new_contents.append(child)
+    
+    logger.debug(f"{get_hierarchy_name(node)}'s new contents [{len(new_contents)}]: {new_contents}")
+    
+    # TODO: 定义一个 contents_smooth 函数，将新 contents 中超短的 <span> 或者 NavigableString 并入前后 span
+
+    node.clear()
+    for child in new_contents:
+        node.append(child)
+    
+    return
+
+
+def html_text_segment(html_str: str, wrapping_tag: str = "span") -> str:
     """
     Segments the text content of the given HTML string into readable fragments,
     wrapping each fragment in a specified tag (default: <span>).
@@ -45,58 +98,9 @@ def html_text_segment(html_str: str, wrapping_tag: str = "span", id_prefix="f") 
     
     if not root.contents:
         logger.warning(f"No content found in html_str【{html_str[:10]}{' ...' if len(html_str) > 10 else ''}】")        
-    
-    def _segment_node(node) -> None:
-        """
-        Recursively processes an HTML node, segmenting its text content into readable fragments and wrapping each fragment in a new tag.
-        For each child node:
-          - NavigableString children are split into fragments, which are either wrapped in a tag or kept as-is based on readability.
-          - Tag children are processed recursively.
-          - Other types of children are preserved.
-        The node's contents are replaced with the newly processed children.
-        """
-        
-        logger.debug(f"Processing Node: {get_hierarchy_name(node)}")
-        logger.debug(f"{get_hierarchy_name(node)}'s original contents [{len(node.contents)}]: {node.contents}")
-        new_contents = []
 
-        for child in node.contents:
-            if type(child) is NavigableString:
-                text = str(child)
-                if text.strip():
-                    logger.debug(f"  Handle NavigableString:【{text[:10]}{' ...' if len(text) > 10 else ''}】")
-                    # 对文本进行分句，每个分句包裹到一个新的 wrap_tag 标签中，然后加入到 new_contents
-                    fragments = segment_text_by_re(text)
-                    for fragment in fragments:
-                        if is_readable(fragment):
-                            # append as a new tag
-                            new_tag = wrap_text_in_tag(soup, fragment)
-                            new_contents.append(new_tag)
-                        else:
-                            # append as NavigableString
-                            new_contents.append(fragment)
-                else:
-                    logger.debug("  Keep empty NavigableString child")
-                    new_contents.append(child)  # 保留空白的 NavigableString
-            elif isinstance(child, Tag):
-                logger.debug(f"  Handle Tag: {get_hierarchy_name(child)}")
-                _segment_node(child)
-                new_contents.append(child)  # don't forget processed child
-            else:
-                logger.debug(f"  Keep unknown type child: {type(child)}")
-                new_contents.append(child)
-        
-        logger.debug(f"{get_hierarchy_name(node)}'s new contents [{len(new_contents)}]: {new_contents}")
-        
-        # TODO: 定义一个 contents_smooth 函数，将超短的 <span> 或者 NavigableString 并入前后 span
-
-        node.clear()
-        for child in new_contents:
-            node.append(child)
-        
-        return 
     
-    _segment_node(root)
+    _segment_node(soup, root, wrapping_tag)
     return str(soup)
 
 

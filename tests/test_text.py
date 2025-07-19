@@ -237,14 +237,18 @@ def test_replace_non_terminal_dot(test_case):
     assert restored_text == text, f"还原失败 (Note: {note})"
 
 
-def test_is_readable():
-    from audible_epub3_gen.utils.text_parser import is_readable
-    assert is_readable("Hello, world!") is True
-    assert is_readable("你好，世界！") is True
-    assert is_readable("Test\nSecond line") is True
-    assert is_readable("  !6 ") is True
+is_readable_test_data = [
+    ("Hello, world!", True),
+    ("你好，世界！", True),
+    ("Test\nSecond line", True),
+    ("  !6 ", True),
+    ("   ", False),
+    ("", False),
+    ("\n\t", False),
+    ("...", False),
+]
 
-    assert is_readable("   ") is False
-    assert is_readable("") is False
-    assert is_readable("\n\t") is False
-    assert is_readable("...") is False
+@pytest.mark.parametrize("text, expected", is_readable_test_data)
+def test_is_readable(text, expected):
+    from audible_epub3_gen.utils.text_parser import is_readable
+    assert is_readable(text) is expected
