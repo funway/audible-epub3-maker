@@ -18,7 +18,7 @@ def get_hierarchy_name(tag: Tag) -> str:
     return " > ".join(reversed(hierarchy))
 
 
-def wrap_text_in_tag(soup: BeautifulSoup, text: str, wrapping_tag: str = "span", attrs: dict = {"data-aeg-x":"1"}) -> Tag:
+def wrap_text_in_tag(soup: BeautifulSoup, text: str, wrapping_tag: str = "span", attrs: dict | None = None) -> Tag:
     """Wraps the given text in a new tag with specified attributes.
 
     Args:
@@ -31,11 +31,12 @@ def wrap_text_in_tag(soup: BeautifulSoup, text: str, wrapping_tag: str = "span",
         Tag: The newly created tag containing the text.
     """
     assert isinstance(soup, BeautifulSoup), "soup must be a BeautifulSoup instance"
-    tag = soup.new_tag(name=wrapping_tag, attrs=attrs, string=text)
+    tag = soup.new_tag(name=wrapping_tag, attrs=attrs)
+    tag.string = text
     return tag
 
 
-def _segment_node(soup: BeautifulSoup, node: Tag, wrapping_tag: str = "span") -> None:
+def _segment_node(soup: BeautifulSoup, node: Tag, wrapping_tag: str = "span", wrapping_tag_attrs: dict | None = None) -> None:
     """
     Recursively processes an HTML node, segmenting its text content into readable fragments and wrapping each fragment in a new tag.
     For each child node:
@@ -46,8 +47,9 @@ def _segment_node(soup: BeautifulSoup, node: Tag, wrapping_tag: str = "span") ->
     """
     assert isinstance(soup, BeautifulSoup), "soup must be a BeautifulSoup instance"
     assert isinstance(node, Tag), "node must be a Tag instance"
+    
     logger.debug(f"Processing Node: {get_hierarchy_name(node)}")
-    logger.debug(f"{get_hierarchy_name(node)}'s original contents [{len(node.contents)}]: {node.contents}")
+    logger.debug(f"  {get_hierarchy_name(node)}'s original contents [{len(node.contents)}]: {node.contents}")
     new_contents = []
 
     for child in node.contents:
@@ -60,7 +62,7 @@ def _segment_node(soup: BeautifulSoup, node: Tag, wrapping_tag: str = "span") ->
                 for fragment in fragments:
                     if is_readable(fragment):
                         # append as a new tag
-                        new_tag = wrap_text_in_tag(soup, fragment)
+                        new_tag = wrap_text_in_tag(soup, fragment, wrapping_tag, wrapping_tag_attrs)
                         new_contents.append(new_tag)
                     else:
                         # append as NavigableString
@@ -70,13 +72,13 @@ def _segment_node(soup: BeautifulSoup, node: Tag, wrapping_tag: str = "span") ->
                 new_contents.append(child)  # 保留空白的 NavigableString
         elif isinstance(child, Tag):
             logger.debug(f"  Handle Tag: {get_hierarchy_name(child)}")
-            _segment_node(soup, child, wrapping_tag)
+            _segment_node(soup, child, wrapping_tag, wrapping_tag_attrs)
             new_contents.append(child)  # don't forget processed child
         else:
             logger.debug(f"  Keep unknown type child: {type(child)}")
             new_contents.append(child)
     
-    logger.debug(f"{get_hierarchy_name(node)}'s new contents [{len(new_contents)}]: {new_contents}")
+    logger.debug(f"  {get_hierarchy_name(node)}'s new contents [{len(new_contents)}]: {new_contents}")
     
     # TODO: 定义一个 contents_smooth 函数，将新 contents 中超短的 <span> 或者 NavigableString 并入前后 span
 
@@ -87,20 +89,25 @@ def _segment_node(soup: BeautifulSoup, node: Tag, wrapping_tag: str = "span") ->
     return
 
 
-def html_text_segment(html_str: str, wrapping_tag: str = "span") -> str:
+def html_text_segment(html_text: str, wrapping_tag: str = "span") -> str:
     """
     Segments the text content of the given HTML string into readable fragments,
     wrapping each fragment in a specified tag (default: <span>).
     Returns the processed HTML as a string.
     """
-    soup = BeautifulSoup(html_str, BEAUTIFULSOUP_PARSER)
+    soup = BeautifulSoup(html_text, BEAUTIFULSOUP_PARSER)
     root = soup.body or soup
     
     if not root.contents:
-        logger.warning(f"No content found in html_str【{html_str[:10]}{' ...' if len(html_str) > 10 else ''}】")        
-
+        logger.warning(f"No content found in html text【{html_text[:10]}{' ...' if len(html_text) > 10 else ''}】")        
     
-    _segment_node(soup, root, wrapping_tag)
+    _segment_node(soup, root, wrapping_tag, {"data-aeg-x":"1"})
+
+    # TODO
+    # 遍历新增的 tag_elem
+    # 1. 给 tag_elem 增加 id 属性，值递增以 prefix+ddddd 的方式，prefix 可以定义, ddddd 为五位数字，不足五位则前面补0，允许超出五位。
+    # 2.
+    
     return str(soup)
 
 
@@ -112,8 +119,11 @@ def main():
         ''',
         
         '''<div>
-            <!-- This is a comment -->
-            <span>First sentence.</span> Second sentence.<br/> Hi there!
+<br class="calibre1"/> 　　「在家的時候？」<br class="calibre1"/>
+<br class="calibre1"/> 　　「叫明子。」<br class="calibre1"/>
+<br class="calibre1"/> 　　「明子！我叫小英子！我們是鄰居。我家挨著荸薺庵。－－給你！」<br class="calibre1"/>
+<br class="calibre1"/> 　　小英子把吃剩的半個蓮蓬扔給明海，小明子就剝開蓮蓬殼，一顆一顆吃起來。<br class="calibre1"/>
+
         </div>
         ''',
     ]
