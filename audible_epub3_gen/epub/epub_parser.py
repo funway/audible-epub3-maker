@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 
 from audible_epub3_gen.config import INPUT_DIR, OUTPUT_DIR
 from audible_epub3_gen.utils import logging_setup
-from audible_epub3_gen.epub.html_parser import html_text_segment
+from audible_epub3_gen.segmenter.html_segmenter import html_text_segment
 
 
 logger = logging.getLogger(__name__)

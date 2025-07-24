@@ -418,7 +418,7 @@ def create_epub_item(raw_content: bytes | LazyLoad, id: str, href: str, media_ty
 
 
 def main():
-    from audible_epub3_gen.epub.html_parser import html_text_segment
+    from audible_epub3_gen.segmentation.html_segmenter import html_text_segment
 
     epub_files = INPUT_DIR.glob('*old*.epub')
     for epub_file in epub_files:

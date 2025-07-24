@@ -4,10 +4,12 @@ from bs4 import BeautifulSoup, Tag, NavigableString
 
 from audible_epub3_gen.utils import logging_setup
 from audible_epub3_gen.config import BEAUTIFULSOUP_PARSER
-from audible_epub3_gen.utils.text_parser import segment_text_by_re, is_readable
-
+from audible_epub3_gen.segmenter.text_segmenter import segment_text_by_re, is_readable
 
 logger = logging.getLogger(__name__)
+
+NEW_TAG_ATTR_ID_PREFIX = "ae"
+NEW_TAG_ATTR_MARK = "data-ae-x"
 
 def get_hierarchy_name(tag: Tag) -> str:
     """Returns a string representation of the tag's hierarchy."""
@@ -25,7 +27,7 @@ def wrap_text_in_tag(soup: BeautifulSoup, text: str, wrapping_tag: str = "span",
         soup (BeautifulSoup): The BeautifulSoup object used to create new tags.
         text (str): The text to wrap.
         wrapping_tag (str): The name of the tag to wrap the text in.
-        attrs (dict, optional): Attributes to set on the new tag. Defaults to {"data-aeg-x":"1"}.
+        attrs (dict, optional): Attributes to set on the new tag.
 
     Returns:
         Tag: The newly created tag containing the text.
@@ -101,13 +103,18 @@ def html_text_segment(html_text: str, wrapping_tag: str = "span") -> str:
     if not root.contents:
         logger.warning(f"No content found in html text【{html_text[:10]}{' ...' if len(html_text) > 10 else ''}】")        
     
-    _segment_node(soup, root, wrapping_tag, {"data-aeg-x":"1"})
+    _segment_node(soup, root, wrapping_tag, {f"{NEW_TAG_ATTR_MARK}":"1"})
 
-    # TODO
-    # 遍历新增的 tag_elem
-    # 1. 给 tag_elem 增加 id 属性，值递增以 prefix+ddddd 的方式，prefix 可以定义, ddddd 为五位数字，不足五位则前面补0，允许超出五位。
-    # 2.
-    
+    counter = 1
+    new_elems = soup.select(f"{wrapping_tag}[{NEW_TAG_ATTR_MARK}]")
+    for new_elem in new_elems:
+        if not new_elem.has_attr("id"):
+            id_value = f"{NEW_TAG_ATTR_ID_PREFIX}{counter:05d}"
+            new_elem["id"] = id_value
+            counter += 1
+        else:
+            logger.warning(f"One <{wrapping_tag}> tag already has an id: {new_elem["id"]}")
+
     return str(soup)
 
 
@@ -118,13 +125,24 @@ def main():
         </p>
         ''',
         
-        '''<div>
-<br class="calibre1"/> 　　「在家的時候？」<br class="calibre1"/>
-<br class="calibre1"/> 　　「叫明子。」<br class="calibre1"/>
-<br class="calibre1"/> 　　「明子！我叫小英子！我們是鄰居。我家挨著荸薺庵。－－給你！」<br class="calibre1"/>
-<br class="calibre1"/> 　　小英子把吃剩的半個蓮蓬扔給明海，小明子就剝開蓮蓬殼，一顆一顆吃起來。<br class="calibre1"/>
+        '''<body><header/><section class="chapter" title="The Old Man and the Sea" epub:type="chapter" id="id70295538646860"><div class="titlepage"><div><div><h1 class="title">The Old Man and the Sea</h1></div></div></div><p>He was an old man who fished alone in a skiff in the Gulf Stream and he
+had gone eighty–four days now without taking a fish.  In the first
+forty days a boy had been with him.  But after forty days without a
+fish the boy's parents had told him that the old man was now definitely
+and finally <span class="emphasis"><em>salao</em></span>, which is the worst form of unlucky, and the boy
+had gone at their orders in another boat which caught three good fish
+the first week.</p></section></body>
+        ''',
 
-        </div>
+        '''<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+        <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xmlns:m="http://www.w3.org/1998/Math/MathML" xmlns:pls="http://www.w3.org/2005/01/pronunciation-lexicon" xmlns:ssml="http://www.w3.org/2001/10/synthesis" xmlns:svg="http://www.w3.org/2000/svg">
+<head><title>The Old Man and the Sea</title>
+<link rel="stylesheet" type="text/css" href="docbook-epub.css"/><meta name="generator" content="DocBook XSL Stylesheets Vsnapshot_9885"/>
+<style type="text/css"> img { max-width: 100%; }</style>
+</head>
+<body><div id="cover-image"><img src="bookcover-generated.jpg"/><h1>Cover Page</h1></div><p>Hello <b>World</b></p> <br/><br> <img src="cover.jpg"></body>
+</html>
         ''',
     ]
     

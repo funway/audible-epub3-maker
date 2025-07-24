@@ -129,11 +129,11 @@ def is_readable(text: str) -> bool:
 if __name__ == "__main__":
     from datetime import datetime
     # Example usage
-
     sample_text = "Dr. Smith went to the lab at 3.14 PM. Mr. Wang said the project version is 1.2.3. Call U.S. It's from U.S. Mr. Wang doesn't like it."
     modified_text = replace_non_terminal_dot(sample_text)
-    print(modified_text)  # Output: "Dr_DOT_ Smith went to the lab at 3_DOT_14 PM. The version is 1_DOT_2_DOT_3."
-    print(restore_non_terminal_dot(modified_text))  # Output: "Dr. Smith went to the lab at 3.14 PM. The version is 1.2.3."
+    print(f"original: \n{sample_text}")
+    print(f"replace dot: \n{modified_text}")  # Output: "Dr_DOT_ Smith went to the lab at 3_DOT_14 PM. The version is 1_DOT_2_DOT_3."
+    print(f"restore dot: \n{restore_non_terminal_dot(modified_text)}")  # Output: "Dr. Smith went to the lab at 3.14 PM. The version is 1.2.3."
 
     # text = ' "Oh! This is a test...""It\'s so hard!"他说。Another sentence! 比如 "v1.12.3" 或 "Dr. Smith"? '
     # start = datetime.now()
