@@ -7,8 +7,15 @@ from audible_epub3_gen.utils import logging_setup
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
-DELIMITERS=set(".?!,;，？！。；")
-CLOSING_PUNCTUATION = set('\'"’”」』]')
+DELIMITERS=set([
+    '.', '?', '!', ',', ';',     # English
+    '。', '？', '！', '，', '；',  # Chinese
+])
+
+DIALOG_CLOSING_PUNCTUATION = set([
+    "'", '"',                  # English
+    '’', '”', '」', '』', '】',  # Chinese
+])
 
 ABBRS_NON_TERMINAL = set(["Mr.", "Mrs.", "Ms.", "Dr.", "Prof."])
 ABBRS_MAY_TERMINAL = set(["U.S.", "U.S.A.", "U.K.", "U.N.", "Inc.", "Ltd."])
@@ -39,7 +46,7 @@ def replace_non_terminal_dot(text: str, replacement: str = "_DOT_") -> str:
 
         replaced_abbr = abbr.replace('.', replacement) if abbr in ABBRS_NON_TERMINAL else abbr[:-1].replace('.', replacement) + abbr[-1]
         
-        if next_char is None or next_char in CLOSING_PUNCTUATION:
+        if next_char is None or next_char in DIALOG_CLOSING_PUNCTUATION:
             replaced_abbr = abbr[:-1].replace('.', replacement) + abbr[-1]
         elif next_char.islower() and abbr in ABBRS_MAY_TERMINAL:
             replaced_abbr = abbr.replace('.', replacement)
@@ -84,7 +91,7 @@ def segment_text_by_re(text: str) -> list:
     text = replace_non_terminal_dot(text)
 
     reg_d = re.escape("".join(sorted(DELIMITERS)))
-    reg_q = re.escape("".join(sorted(CLOSING_PUNCTUATION)))
+    reg_q = re.escape("".join(sorted(DIALOG_CLOSING_PUNCTUATION)))
     # split_pattern = r"([{d}][{q}])|([{d}])".format(d=reg_d, q=reg_q)
     split_pattern = r"(?<=[{d}])([{q}]?)".format(d=reg_d, q=reg_q)
     logger.debug(f"Using split pattern: {split_pattern}")
@@ -98,7 +105,7 @@ def segment_text_by_re(text: str) -> list:
             continue
         fragment = restore_non_terminal_dot(fragment)
         
-        is_delimiter_or_quote = len(fragment) == 1 and fragment in (DELIMITERS | CLOSING_PUNCTUATION)
+        is_delimiter_or_quote = len(fragment) == 1 and fragment in (DELIMITERS | DIALOG_CLOSING_PUNCTUATION)
         if is_delimiter_or_quote and res_fragments:
             # 如果当前片段是分隔符且上一个片段已经存在，则合并当前分隔符
             res_fragments[-1] += fragment
@@ -129,16 +136,18 @@ def is_readable(text: str) -> bool:
 if __name__ == "__main__":
     from datetime import datetime
     # Example usage
-    sample_text = "Dr. Smith went to the lab at 3.14 PM. Mr. Wang said the project version is 1.2.3. Call U.S. It's from U.S. Mr. Wang doesn't like it."
+    sample_text = "Dr. Smith#BK# went to the \nlab at 3.14 PM.\nMr. Wang said the project version is 1.2.3. Call U.S.   It's from U.S. Mr. Wang doesn't like it."
+    text = ' "Oh! This is a test...""It\'s so hard!"他说。Another sentence! 比如 "v1.12.3" 或 "Dr. Smith"? '
+    sample_text += text
+
     modified_text = replace_non_terminal_dot(sample_text)
     print(f"original: \n{sample_text}")
     print(f"replace dot: \n{modified_text}")  # Output: "Dr_DOT_ Smith went to the lab at 3_DOT_14 PM. The version is 1_DOT_2_DOT_3."
     print(f"restore dot: \n{restore_non_terminal_dot(modified_text)}")  # Output: "Dr. Smith went to the lab at 3.14 PM. The version is 1.2.3."
 
-    # text = ' "Oh! This is a test...""It\'s so hard!"他说。Another sentence! 比如 "v1.12.3" 或 "Dr. Smith"? '
-    # start = datetime.now()
-    # segments = segment_text_by_re(text)
-    # end = datetime.now()
-    # print(f"Segmented {len(segments)} sentences in {end - start} seconds.")
-    # for i, segment in enumerate(segments, start=1):
-    #     print(f"Segment {i}: 【{segment}】")
+    start = datetime.now()
+    segments = segment_text_by_re(sample_text)
+    end = datetime.now()
+    print(f"\n=== Segmented {len(segments)} sentences in {end - start} seconds. ===\n")
+    for i, segment in enumerate(segments, start=1):
+        print(f"Segment {i}: {segment}")

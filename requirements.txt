@@ -2,5 +2,7 @@ python-dotenv
 ebooklib
 beautifulsoup4
 azure-cognitiveservices-speech
+pydub
+audioop-lts; python_version >= "3.13"
 pytest
 pytest-html

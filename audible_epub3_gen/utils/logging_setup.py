@@ -1,5 +1,6 @@
 import logging
-from audible_epub3_gen.config import LOG_FILE, LOG_LEVEL, LOG_DIR, LOG_FORMAT
+from logging.handlers import RotatingFileHandler
+from audible_epub3_gen.config import LOG_FILE, LOG_DIR, LOG_FORMAT, settings
 
 def setup_logging():
     """Sets up logging configuration for the application.
@@ -7,11 +8,15 @@ def setup_logging():
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     root_logger = logging.getLogger()
-    root_logger.setLevel(LOG_LEVEL)
+    root_logger.setLevel(settings.log_level)
 
     formatter = logging.Formatter(LOG_FORMAT)
 
-    file_handler = logging.FileHandler(LOG_FILE, mode='a', encoding='utf-8')
+    file_handler = RotatingFileHandler(filename=LOG_FILE, 
+                                       mode='a', 
+                                       maxBytes=16*1024*1024,
+                                       backupCount=3,
+                                       encoding='utf-8',)
     file_handler.setFormatter(formatter)
 
     console_handler = logging.StreamHandler()

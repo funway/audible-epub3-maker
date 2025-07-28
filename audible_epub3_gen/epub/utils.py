@@ -39,7 +39,7 @@ def parse_xml(data: bytes | str, recover: bool = True, resolve_entities: bool = 
     parser = ET.XMLParser(recover=recover, resolve_entities=resolve_entities)
     return ET.fromstring(data, parser=parser) 
 
-def list_zip_files(zf: zipfile.ZipFile, prefix: str = "") -> set[str]:
+def list_files_in_zip(zf: zipfile.ZipFile, prefix: str = "") -> set[str]:
     return {
         zi.filename for zi in zf.infolist()
         if not zi.is_dir() and zi.filename.startswith(prefix)

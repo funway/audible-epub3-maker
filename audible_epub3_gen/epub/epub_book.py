@@ -1,14 +1,16 @@
+import shutil
 import zipfile
 import logging
 import uuid
 import re
+import codecs
 from pathlib import Path, PurePosixPath
 from dataclasses import dataclass
 from lxml import etree as ET
 
 from audible_epub3_gen.config import INPUT_DIR, OUTPUT_DIR
 from audible_epub3_gen.utils import logging_setup
-from audible_epub3_gen.epub.utils import guess_media_type, parse_xml, list_zip_files
+from audible_epub3_gen.epub.utils import guess_media_type, parse_xml, list_files_in_zip
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +29,7 @@ class LazyLoad:
         raise NotImplementedError
 
 @dataclass
-class LazyLoadFromOriginal(LazyLoad):
+class LazyLoadFromZip(LazyLoad):
     zip_file_path: Path
     zip_href: str
 
@@ -36,7 +38,7 @@ class LazyLoadFromOriginal(LazyLoad):
             return zf.read(self.zip_href)
 
 @dataclass
-class LazyLoadFromNewFile(LazyLoad):
+class LazyLoadFromFile(LazyLoad):
     file_path: Path
 
     def load(self) -> bytes:
@@ -103,22 +105,37 @@ class EpubItem(object):
 class EpubTextItem(EpubItem): 
     def get_text(self, encoding: str | None = None) -> str:
         """
+        Decodes the raw byte content of the item into a Unicode string.
+
+        Decoding priority:
+            1. Use the explicitly provided `encoding` if given.
+            2. Otherwise, try to extract the encoding from the XML declaration in the first 128 bytes.
+            3. If no encoding is found, fall back to UTF-8.
+
+        Args:
+            encoding (str, optional): Character encoding to use for decoding. If None, attempt auto-detection.
+
+        Returns:
+            str: Decoded text content.
         """
         raw_bytes = self.get_raw()
-        
+        fallback_enc = "utf-8"
         if encoding is None:
-            fallback_enc = "utf-8"
             head = raw_bytes[:128]
             try:
                 head_str = head.decode("ascii", errors="ignore").lower()
-                xml_encoding_match = re.search(r'encoding=["\']([\w\-]+)["\']', head_str)
+                xml_encoding_match = re.search(r'encoding\s*=\s*["\']([\w\-]+)["\']', head_str)
                 if xml_encoding_match:
-                    encoding = xml_encoding_match.group(1)
+                    declared_encoding = xml_encoding_match.group(1)
+                    codecs.lookup(declared_encoding)
+                    encoding = declared_encoding
+                else:
+                    encoding = fallback_enc
             except Exception:
-                logger.exception("Unknown exception when searching encoding.")
+                logger.exception("Failed to extract or validate declared encoding, fallback to utf-8.")
                 encoding = fallback_enc
         
-        return raw_bytes.decode(encoding)
+        return raw_bytes.decode(encoding if encoding else "utf-8")
 
     def set_text(self, text: str):
         self.set_raw(text.encode())
@@ -192,6 +209,12 @@ class EpubBook:
         self.items.append(item)
         pass
 
+    def add_smil_item(self, item: EpubSMIL, target_id: str):
+        self.add_item(item)
+        target_item = self.get_item_by_id(target_id)
+        target_item.attrs["media-overlay"] = item.id
+        pass
+
     def _read_epub(self, epub_path):
         logger.debug(f"Loading epub: {epub_path}")
         with zipfile.ZipFile(epub_path, "r") as zf:
@@ -227,7 +250,7 @@ class EpubBook:
                 manifest_items[zip_href] = item_elem
             logger.debug(f"All manifest files: {sorted(manifest_items.keys())}")
             
-            all_files = list_zip_files(zf)
+            all_files = list_files_in_zip(zf)
             ignored_files = {
                 "mimetype",
                 CONTAINER_PATH,
@@ -236,7 +259,7 @@ class EpubBook:
             all_files = sorted(all_files - ignored_files)
             logger.debug(f"All zip files: {all_files}")
             for zip_href in all_files:
-                lazy_load = LazyLoadFromOriginal(epub_path, zip_href)
+                lazy_load = LazyLoadFromZip(self.epub_path, zip_href)
                 
                 item_elem = manifest_items.pop(zip_href, None)
                 if item_elem is not None:
@@ -307,42 +330,30 @@ class EpubBook:
         return chapters
     
     def save_epub(self, output_path):
-        with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_DEFLATED) as zf_output:
-            # 1. mimetype 必须 uncompressed 且排在第一位
-            zf_output.writestr("mimetype", MIMETYPE, compress_type=zipfile.ZIP_STORED)
-            
-            # 2. container
-            self._write_container(zf_output)
-            
-            # 3. opf
-            self._write_opf(zf_output)
+        # TODO: 将原文件作为 backup 一起保存在新的 epub 中，并在 item 属性中加上本项目的版本号，或者日期
 
-            # 4. all items
-            lazyload_from_orig_epub = []
-            layzload_from_new_file = []
-            for item in self.items:
-                if item.is_loaded:
-                    content = item.get_raw()
-                    zf_output.writestr(self.to_zip_href(item.href), content)
-                    continue
+        tmp_path = Path(output_path).with_suffix(".tmp.epub")
+        try:
+            with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as zf_output:
+                # 1. mimetype 必须 uncompressed 且排在第一位
+                zf_output.writestr("mimetype", MIMETYPE, compress_type=zipfile.ZIP_STORED)
                 
-                if isinstance(item.get_lazy_load(), LazyLoadFromOriginal):
-                    lazyload_from_orig_epub.append(item)
-                elif isinstance(item.get_lazy_load(), LazyLoadFromNewFile):
-                    layzload_from_new_file.append(item)
+                # 2. container
+                self._write_container(zf_output)
+                
+                # 3. opf
+                self._write_opf(zf_output)
 
-            if len(lazyload_from_orig_epub):
-                with zipfile.ZipFile(self.epub_path, "r") as zf_original:
-                    for item in lazyload_from_orig_epub:
-                        zip_href = self.to_zip_href(item.href)
-                        data = zf_original.read(zip_href)
-                        zf_output.writestr(zip_href, data)
-                        logger.debug(f"save lazyload content from EPUB: {len(data)/1024:.2f} KB, {zip_href}")
+                # 4. all items
+                self._write_items(zf_output)
             
-            for item in layzload_from_new_file:
-                file_path = item.get_lazy_load().file_path
-                zf_output.write(file_path, arcname=self.to_zip_href(item.href))
-                logger.debug(f"save lazyload content from new file: {file_path} -> {self.to_zip_href(item.href)}")
+            shutil.move(tmp_path, output_path)
+        except Exception as e:
+            raise e
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink(missing_ok=True)
+            logger.info(f"🎉 EPUB saved to {output_path}")
         pass
         
 
@@ -391,6 +402,46 @@ class EpubBook:
         zp.writestr(self.opf_path, opf_bytes)
         pass
 
+    def _write_items(self, zp: zipfile.ZipFile):
+        lazyload_from_orig_epub = []
+        layzload_from_other_zip = []
+        layzload_from_other_file = []
+        
+        for item in self.items:
+            if item.is_loaded:
+                content = item.get_raw()
+                zp.writestr(self.to_zip_href(item.href), content)
+                continue
+            
+            lazyload = item.get_lazy_load()
+            if isinstance(lazyload, LazyLoadFromZip):
+                if lazyload.zip_file_path == self.epub_path:
+                    lazyload_from_orig_epub.append(item)
+                else:
+                    layzload_from_other_zip.append(item)
+            elif isinstance(lazyload, LazyLoadFromFile):
+                layzload_from_other_file.append(item)
+
+        if len(lazyload_from_orig_epub):
+            with zipfile.ZipFile(self.epub_path, "r") as zp_original:
+                for item in lazyload_from_orig_epub:
+                    zip_href = self.to_zip_href(item.href)
+                    data = zp_original.read(zip_href)
+                    zp.writestr(zip_href, data)
+                    logger.debug(f"save lazyload content from EPUB: {len(data)/1024:.2f} KB, {zip_href}")
+        
+        for item in layzload_from_other_zip:
+            other_zip_file = item.get_lazy_load().zip_file_path
+            content = item.get_raw()
+            zp.writestr(self.to_zip_href(item.href), content)
+            logger.warning(f"save lazyload content from other zip: {len(content)/1024:.2f} KB, {other_zip_file}")
+        
+        for item in layzload_from_other_file:
+            file_path = item.get_lazy_load().file_path
+            zp.write(file_path, arcname=self.to_zip_href(item.href))
+            logger.debug(f"save lazyload content from new file: {file_path} -> {self.to_zip_href(item.href)}")
+        pass
+
     def get_item_by_id(self, id: str) -> EpubItem | None:
         return next((item for item in self.items if item.id == id), None)
 
@@ -418,9 +469,9 @@ def create_epub_item(raw_content: bytes | LazyLoad, id: str, href: str, media_ty
 
 
 def main():
-    from audible_epub3_gen.segmentation.html_segmenter import html_text_segment
+    from audible_epub3_gen.segmenter.html_segmenter import html_segment_and_wrap
 
-    epub_files = INPUT_DIR.glob('*old*.epub')
+    epub_files = INPUT_DIR.glob('*.epub')
     for epub_file in epub_files:
         logger.debug(f"Start Processing: {epub_file}")
         book = EpubBook(epub_file)
@@ -433,7 +484,7 @@ def main():
         chapters_count = len(chapters)
         for i, chapter in enumerate(chapters, start=1):
             logger.debug(f"chapter [{i}/{chapters_count}], id: {chapter.id}, file: {chapter.href}")
-            modified_content = html_text_segment(chapter.get_text())
+            modified_content = html_segment_and_wrap(chapter.get_text())
             chapter.set_text(modified_content)
 
         output_path = OUTPUT_DIR / f"{epub_file.stem}_new.epub"
