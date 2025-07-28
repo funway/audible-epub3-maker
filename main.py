@@ -1,39 +1,86 @@
-import argparse
-import os
-from audible_epub3_gen.config import DEFAULT_LANGUAGE, DEFAULT_VOICE
-from audible_epub3_gen.epub.parser import extract_text_from_epub
-from audible_epub3_gen.tts.azure_tts import synthesize_speech_with_timestamps
-from audible_epub3_gen.epub.generator import generate_smil
+from rapidfuzz import fuzz
 
-INPUT_EPUB = 'input/your_book.epub'
-OUTPUT_DIR = 'output/'
+def test_fuzz():
+    texts = ("多符号与空格", "this is a 中文测试", "this  is  a  中文测试!")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    print(texts, "partial_ratio:", fuzz.partial_ratio(texts[1], texts[2]))
+    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
+    print(texts, "token_set_ratio:", fuzz.token_set_ratio(texts[1], texts[2]))
 
-def main(language, voice):
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    chapters = extract_text_from_epub(INPUT_EPUB)
+    texts = ("单词", "It's", "Its")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    print(texts, "partial_ratio:", fuzz.partial_ratio(texts[1], texts[2]))
+    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
+    print(texts, "token_set_ratio:", fuzz.token_set_ratio(texts[1], texts[2]))
 
-    for ch in chapters:
-        text = ' '.join([p['text'] for p in ch['paragraphs']])
-        audio_file = os.path.join(OUTPUT_DIR, f"{os.path.basename(ch['file_name'])}.mp3")
-        timestamps = synthesize_speech_with_timestamps(text, audio_file, language, voice)
+    texts = ("大小写", "apple", "Apple")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    print(texts, "partial_ratio:", fuzz.partial_ratio(texts[1], texts[2]))
+    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
+    print(texts, "token_set_ratio:", fuzz.token_set_ratio(texts[1], texts[2]))
 
-        par_list = []
-        offset = 0.0
-        for p in ch['paragraphs']:
-            duration = 2.5
-            par_list.append({
-                'id': p['id'],
-                'clipBegin': offset,
-                'clipEnd': offset + duration
-            })
-            offset += duration
+    texts = ("中文+空格", "我叫王富贵。", "我 叫 王 富贵。")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    print(texts, "partial_ratio:", fuzz.partial_ratio(texts[1], texts[2]))
+    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
+    print(texts, "token_set_ratio:", fuzz.token_set_ratio(texts[1], texts[2]))
 
-        smil_file = os.path.join(OUTPUT_DIR, f"{os.path.basename(ch['file_name'])}.smil")
-        generate_smil(ch['file_name'], os.path.basename(audio_file), par_list, smil_file)
+    texts = ("中文+空格", "我叫王富贵。", "我叫 王富 贵。")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    print(texts, "partial_ratio:", fuzz.partial_ratio(texts[1], texts[2]))
+    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
+    print(texts, "token_set_ratio:", fuzz.token_set_ratio(texts[1], texts[2]))
+
+    texts = ("英文无空格", "My name is Fengwei Wang.", "MynameisFengweiWang")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    print(texts, "partial_ratio:", fuzz.partial_ratio(texts[1], texts[2]))
+    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
+    print(texts, "token_set_ratio:", fuzz.token_set_ratio(texts[1], texts[2]))
+
+    # 渐进，取最大的时
+    print(fuzz.token_sort_ratio("this is a 中文测试", "is  a 中文  测试"))
+    print(fuzz.token_sort_ratio("this is a 中文测试", "this  is  a 中文  测"))
+    print(fuzz.token_sort_ratio("this is a 中文测试", "this  is  a 中文  测试"))
+    print(fuzz.token_sort_ratio("this is a 中文测试", "this  is  a 中文  测试!"))
+
+    texts = ("渐进测试", "My name is Fengwei.", "Hello,  My  name is")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
+    texts = ("渐进测试", "My name is Fengwei.", "Hello, My name is Funway")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
+    texts = ("渐进测试", "My name is Fengwei.", "Hello, My name is Funway.")  # 命中右边界
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
+    texts = ("渐进测试", "My name is Fengwei.", "Hello, My name is Funway. How")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
+    texts = ("渐进测试", "My name is Fengwei.", "Hello, My name is Funway. How are")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
+    texts = ("渐进测试", "My name is Fengwei.", "My name is Funway.")  # 命中左边界
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
+
+
+    texts = ("只差一个字符", "MynamesFengweiWang.", "MynameisFengweiWang.")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    texts = ("只差一个字符", "hi", "he")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    texts = ("只差一个字符", "MynamesFengweiWang. hello, howareyou.nicetomeetyou", "MynameisFengweiWang. hello, howareyou.nicetomeetyou")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+
+    texts = ("测试", "hewasanoldmanwhofishedaloneinaskiffinthegulfstreamandhehadgoneeighty–fourdaysnowwithouttakingafish.", "seahewasanoldmanwhofishedaloneinaskiffinthegulfstreamandhehadgoneeighty–fourdaysnowwithouttakingafish.")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    texts = ("测试", "hewasanoldmanwhofishedaloneinaskiffinthegulfstreamandhehadgoneeighty–fourdaysnowwithouttakingafish.", "seahewasanoldmanwhofishedaloneinaskiffinthegulfstreamandhehadgoneeighty–fourdaysnowwithouttakingafish.\"he's")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    texts = ("测试", "hewasanoldmanwhofishedaloneinaskiffinthegulfstreamandhehadgoneeighty–fourdaysnowwithouttakingafish.", "seahewasanoldmanwhofishedaloneinaskiffinthegulfstreamandhehadgoneeighty–fourdaysnowwithouttakingafish.")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+    texts = ("测试", "hewasanoldmanwhofishedaloneinaskiffinthegulfstreamandhehadgoneeighty–fourdaysnowwithouttakingafish.", "seahewasanoldmanwhofishedaloneinaskiffinthegulfstreamandhehadgoneeighty–fourdaysnowwithouttakingafish.")
+    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+
+    pass
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--language", type=str, default=DEFAULT_LANGUAGE)
-    parser.add_argument("--voice", type=str, default=DEFAULT_VOICE)
-    args = parser.parse_args()
-    main(args.language, args.voice)
+    # main()
+    test_fuzz()

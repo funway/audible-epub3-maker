@@ -3,13 +3,10 @@ import logging
 from bs4 import BeautifulSoup, Tag, NavigableString
 
 from audible_epub3_gen.utils import logging_setup
-from audible_epub3_gen.config import BEAUTIFULSOUP_PARSER
+from audible_epub3_gen.config import BEAUTIFULSOUP_PARSER, SEG_ID_PREFIX, SEG_MARK_ATTR
 from audible_epub3_gen.segmenter.text_segmenter import segment_text_by_re, is_readable
 
 logger = logging.getLogger(__name__)
-
-NEW_TAG_ATTR_ID_PREFIX = "ae"
-NEW_TAG_ATTR_MARK = "data-ae-x"
 
 def get_hierarchy_name(tag: Tag) -> str:
     """Returns a string representation of the tag's hierarchy."""
@@ -167,13 +164,13 @@ def html_segment_and_wrap(html_text: str, wrapping_tag: str = "span") -> str:
     if not root.contents:
         logger.warning(f"No content found in html text【{html_text[:10]}{' ...' if len(html_text) > 10 else ''}】")        
     
-    _segment_node(soup, root, wrapping_tag, {f"{NEW_TAG_ATTR_MARK}":"1"})
+    _segment_node(soup, root, wrapping_tag, {f"{SEG_MARK_ATTR}":"1"})
 
     counter = 1
-    new_elems = soup.select(f"{wrapping_tag}[{NEW_TAG_ATTR_MARK}]")
+    new_elems = soup.select(f"{wrapping_tag}[{SEG_MARK_ATTR}]")
     for new_elem in new_elems:
         if not new_elem.has_attr("id"):
-            id_value = f"{NEW_TAG_ATTR_ID_PREFIX}{counter:05d}"
+            id_value = f"{SEG_ID_PREFIX}{counter:05d}"
             new_elem["id"] = id_value
             counter += 1
         else:

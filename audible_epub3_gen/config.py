@@ -10,12 +10,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_DIR = BASE_DIR / "input"    # only used for dev and testing
 OUTPUT_DIR = BASE_DIR / "output"  # only used for dev and testing
 
+# logging config
 LOG_DIR = BASE_DIR / "logs"
 LOG_FILE = LOG_DIR / "app.log"
 LOG_FORMAT = "%(asctime)s %(levelname)s [p%(process)d,t%(thread)d] %(name)s.%(funcName)s - %(message)s"
 
+# HTML segmentation config
 BEAUTIFULSOUP_PARSER = "lxml-xml"
-
+SEG_ID_PREFIX = "ae"
+SEG_MARK_ATTR = "data-ae-x"
 
 ## Configuration that can be modified by users via environment variables ##
 load_dotenv(override=False)  # Load the .env file into system env if it exists

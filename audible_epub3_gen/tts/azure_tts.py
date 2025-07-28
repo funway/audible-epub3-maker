@@ -1,15 +1,19 @@
 import logging, re, html, io
 from pathlib import Path
 from bs4 import BeautifulSoup
-import azure.cognitiveservices.speech as speechsdk
 from pydub import AudioSegment
+from rapidfuzz import fuzz
+import azure.cognitiveservices.speech as speechsdk
 
 from audible_epub3_gen.utils import logging_setup
-from audible_epub3_gen.config import AZURE_TTS_KEY, AZURE_TTS_REGION, BEAUTIFULSOUP_PARSER, settings
-from audible_epub3_gen.tts.base_tts import BaseTTS, WordBoundary, TagAlignment
+from audible_epub3_gen.utils import helpers
+from audible_epub3_gen.utils.types import WordBoundary, TagAlignment
+from audible_epub3_gen.config import AZURE_TTS_KEY, AZURE_TTS_REGION, BEAUTIFULSOUP_PARSER, SEG_MARK_ATTR, settings
+from audible_epub3_gen.tts.base_tts import BaseTTS
 from audible_epub3_gen.segmenter import html_segmenter, text_segmenter
 
 logger = logging.getLogger(__name__)
+# logging.getLogger('pydub.converter').setLevel(max(logging.INFO, logger.getEffectiveLevel()))
 
 class AzureTTS(BaseTTS):
     """docstring for AzureTTS."""
@@ -25,7 +29,7 @@ class AzureTTS(BaseTTS):
     @staticmethod
     def get_break_ssml(break_time_ms: int = 500) -> str:
         """Returns a SSML break tag with the specified time in milliseconds."""
-        # Adding `\n` or `.` before the <break> tag helps improve the stability of word boundary detection, 
+        # Adding `\n` before the <break> tag helps improve the stability of word boundary detection, 
         # by preventing the lack of effective delimiters between words surrounding a <break> tag.
         return f'\n<break time="{break_time_ms}ms" />'
 
@@ -211,21 +215,88 @@ class AzureTTS(BaseTTS):
 
         # 3. merge audio and word boundaries
         merged_audio, merged_wbs = self._merge_audio_chunks_and_word_boundaries(chunks)
+        for wb in merged_wbs:
+            logger.debug(f"wb: {wb}")
 
         # 4. save merged audio
         self._save_audio(merged_audio, output_file, metadata)
         
-        return 
+        return merged_wbs
   
 # 这个不应该放在某个 TTS 类里面了，应该是一个 utils 的函数，或者放到 EpubBook 类里？你觉得呢？
-def force_alignment(html_text: str, word_boundaries: list[WordBoundary]) -> list[TagAlignment]:
+def force_alignment_bak(html_text: str, tag_name: str, word_boundaries: list[WordBoundary]) -> list[TagAlignment]:
     """
     根据 html_text 中之前 segment and wrap 的标签 <span id="prefix+ddd">. 将其与 word_boundaries 中的字符时间进行对齐。
     返回 [id: xxxx, time_stard: xxx, time_end: xxx] 列表。
     你觉得应该给 [id: xxxx, time_stard: xxx, time_end: xxx] 这个三元组对象起个什么名字？ 叫做 Alignment?? 感觉不够清晰。
-    """
-    pass
 
+    修改一下逻辑，首先要对两边都做 nomalize, 去掉所有空格，连续拼接在一起。
+    然后对于每个 sentence, 计算长度 N, 从 wb_text 中取前 N+10 个字符做相似度匹配，没匹配到就不管。继续下一个 sentence
+    """
+    if not len(word_boundaries):
+        logger.warning(f"Word boundaries is empty!")
+        return []
+    
+    soup = BeautifulSoup(html_text, BEAUTIFULSOUP_PARSER)
+    segment_elems = soup.select(f"{tag_name}[{SEG_MARK_ATTR}]")
+    segments = [ (tag["id"], tag.get_text()) for tag in segment_elems]
+    logger.debug(f"segments: {segments}")
+    
+    result_alignments = []
+    cur_left  = 0  # 当前从 wbs 中取词的起点
+    cur_right = 0  # 当前从 wbs 中取词的终点+1 (= 下一次起点)
+    
+    for seg_id, seg_text in segments:
+        logger.debug(f"force alignment: {seg_id}, {seg_text}")
+        seg_text = seg_text.strip().lower()
+        max_similarity = 0
+        if not seg_text:
+            continue
+        
+        cur_left = cur_right  # 初始化此次取 wb 的起点
+        if cur_left >= len(word_boundaries):
+            logger.warning(f"All word boundaries have been consumed, but some segment texts remain unaligned!")
+            break
+        
+        # wb_sentence 扩展右边界，达到最大相似度
+        while cur_right < len(word_boundaries):
+            cur_right += 1
+            wb_consumed = word_boundaries[cur_left: cur_right]
+            wb_sentence = helpers.join_words(wb_consumed, "zh")
+            cur_similarity = fuzz.token_sort_ratio("".join(seg_text.split()), wb_sentence.lower())
+            logger.debug(f"similarity: {cur_similarity:.2f}, origin: {seg_text} 🆚 wb_sentence: {wb_sentence}")
+            if cur_similarity >= max_similarity:
+                max_similarity = cur_similarity
+                continue
+            else:
+                cur_right -= 1
+                break
+        # wb_sentence 收缩左边界，达到最大相似度
+        while cur_left < cur_right:
+            cur_left += 1
+            wb_consumed = word_boundaries[cur_left: cur_right]
+            wb_sentence = helpers.join_words(wb_consumed, "zh")
+            cur_similarity = fuzz.token_sort_ratio("".join(seg_text.split()), wb_sentence.lower())
+            logger.debug(f"similarity: {cur_similarity:.2f}, origin: {seg_text} 🆚 wb_sentence: {wb_sentence}")
+            if cur_similarity > max_similarity:
+                max_similarity = cur_similarity
+                continue
+            else:
+                cur_left -= 1  # restore left pointer
+                break
+        
+        # Now, word_boundaries[cur_left: cur_right] is the most similar to the seg_text
+        wb_consumed = word_boundaries[cur_left: cur_right]
+        wb_sentence = helpers.join_words(wb_consumed, settings.tts_lang)
+        logger.debug(f"Max similarity: {max_similarity:.2f}, origin: {seg_text} 🆚 wb_sentence: {wb_sentence}")
+        alignment = TagAlignment(tag_id = seg_id, 
+                                 start_ms = word_boundaries[cur_left].start_ms,
+                                 end_ms = word_boundaries[cur_right-1].end_ms,
+                                 )
+        logger.debug(f"New alignment: {alignment}")
+        result_alignments.append(alignment)
+            
+    return result_alignments
 
 def main():
     # === 输入文本 (SSML with style & break) ===
@@ -236,9 +307,9 @@ def main():
     <voice name="en-US-AvaMultilingualNeural">
         <mstts:express-as style="narration">
         <prosody rate="0%">
-            <mark name="ae001"/> Hello,World! It's 2025! 哈哈！Let's see what happens<mark name="ae001_end"/>.
-            <mark name="ae002"/> All animals are equal<mark name="ae002_end"/>, 
-            <break time="100ms"/><break time="100ms"/>
+            <mark name="ae001"/> Hello,World! It's 2025! 哈哈！Let<mark name="ae998"/>'s see what happens<mark name="ae001_end"/>.
+            <mark name="ae002"/> All animals are equal, 
+            <break time="500ms"/><break time="300ms"/>
             <mark name="ae003"/> but some animals are more equal than others\n<break time="10ms"/>Oh,这里还可以出现中文吗？
         </prosody>
         </mstts:express-as>
@@ -312,20 +383,27 @@ def main():
     pass
 
 def test():
-  html =   '''<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+    html =   '''<?xml version="1.0" encoding="UTF-8" standalone="no"?>
         <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xmlns:m="http://www.w3.org/1998/Math/MathML" xmlns:pls="http://www.w3.org/2005/01/pronunciation-lexicon" xmlns:ssml="http://www.w3.org/2001/10/synthesis" xmlns:svg="http://www.w3.org/2000/svg">
 <head><title>The Old Man and the Sea</title>
 <link rel="stylesheet" type="text/css" href="docbook-epub.css"/><meta name="generator" content="DocBook XSL Stylesheets Vsnapshot_9885"/>
 <style type="text/css"> img { max-width: 100%; }</style>
 </head>
-<body><header/><section class="chapter" title="The Old Man and the Sea" epub:type="chapter" id="id70295538646860"><div class="titlepage"><div><div><h1 class="title">The Old Man and the Sea</h1></div></div></div><p>He was an old man who fished alone in a skiff in the Gulf Stream and he had gone <strong>eighty–four</strong> days now without taking a fish. "<i>he</i>'s so good." said Mrs Wei.</p>
-<span class="strong">The sky is <strong>blue</strong>. The grass</span> is green.</section></body>
+<body><header/><section class="chapter" title="The Old Man and the Sea" epub:type="chapter" id="id70295538646860"><div class="titlepage"><div><div><h1 class="title">The Old Man and the Sea</h1></div></div></div><p><span class="strong" id="xx003" data-ae-x="1">He was an old man who fished alone in a skiff in the Gulf Stream and he had gone <strong>eighty–four</strong> days now without taking a fish.</span> <span class="strong" id="xx005" data-ae-x="1">"<i>he</i>'s so good." said Mrs Wei.</span></p>
+<span class="strong" id="xx001" data-ae-x="1">The sky is <strong>blue</strong>. The grass</span> is green. 咱们试试中英文吧？</section></body>
 </html>'''
 
-  tts = AzureTTS()
-  tts.html_to_speech(html, "output.mp3", metadata={})
-  pass
+    tts = AzureTTS()
+    wb_list = tts.html_to_speech(html, "output.mp3", metadata={})
+    #   logger.debug(f"wb_list: {wb_list}")
+    #   aligns = force_alignment(html, "span", wb_list)
+    soup = BeautifulSoup(html, BEAUTIFULSOUP_PARSER)
+    segment_elems = soup.select(f"span[{SEG_MARK_ATTR}]")
+    segments = [ tag.get_text() for tag in segment_elems]
+    logger.debug(f"segments: {segments}")
+    alignments = helpers.force_alignment(segments, wb_list)
+    pass
 
 
 if __name__ == "__main__":
