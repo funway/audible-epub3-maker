@@ -187,7 +187,6 @@ def validate_tts_settings():
             lang.lower(): [v.lower() for v in voices]
             for lang, voices in langs_voices.items()
         }
-        print(langs_voices_lowers)
         # 检查语言是否受支持
         if settings.tts_lang.lower() not in (k.lower() for k in langs_voices_lowers):
             logger.debug(f"TTS language '{settings.tts_lang}' not supported by Azure TTS.")
@@ -235,3 +234,9 @@ def confirm_or_exit(msg: str):
         logger.debug(f"{msg} → Aborted by user.")
         print("Aborted by user.")
         sys.exit(1)
+
+
+def test_mp(chapter):
+    logger.debug(f"测试 mp: {type(chapter)}, {chapter.href}")
+    logger.debug(f"当前 settings: {settings.__dict__}")
+    pass

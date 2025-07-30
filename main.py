@@ -30,7 +30,7 @@ def parse_args():
         type=str.upper,
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default="INFO",
-        help="Logging level"
+        help="Logging level (default: INFO)"
     )
 
     # 4. TTS 引擎
@@ -68,14 +68,20 @@ def parse_args():
         help="Force all prompts to be accepted (non-interactive mode)"
     )
 
-    return parser.parse_args()
+    parser.add_argument(
+        "-m", "--max_workers",
+        type=int,
+        default=3,
+        help="Max count of multi-processing workers for audio and alignment generating (default: 3)"
+    )
 
+    return parser.parse_args()
 
 def main():
     args = vars(parse_args())
-    settings.update_args(args)
+    settings.update(args)
     
-    from audible_epub3_gen.utils import logging_setup
+    logging.getLogger().setLevel(getattr(logging, settings.log_level))
 
     app = App()
     app.run()
@@ -83,5 +89,4 @@ def main():
 
 
 if __name__ == "__main__":
-    print(__name__)
     main()
