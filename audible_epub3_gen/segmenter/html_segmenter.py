@@ -3,7 +3,7 @@ import logging
 from bs4 import BeautifulSoup, Tag, NavigableString
 
 from audible_epub3_gen.utils import logging_setup
-from audible_epub3_gen.config import BEAUTIFULSOUP_PARSER, SEG_ID_PREFIX, SEG_MARK_ATTR
+from audible_epub3_gen.utils.constants import BEAUTIFULSOUP_PARSER, SEG_ID_PREFIX, SEG_MARK_ATTR
 from audible_epub3_gen.segmenter.text_segmenter import segment_text_by_re, is_readable
 
 logger = logging.getLogger(__name__)
@@ -154,8 +154,8 @@ def html_segment_and_wrap2(html_text: str, wrapping_tag: str = "span") -> str:
 
 def html_segment_and_wrap(html_text: str, wrapping_tag: str = "span") -> str:
     """
-    Segments the text content of the given HTML string into readable fragments,
-    wrapping each fragment in a specified tag (default: <span>).
+    Segments the text content of the given HTML string into readable fragments, wrapping each fragment in a specified tag (default: <span>).
+    
     Returns the processed HTML as a string.
     """
     soup = BeautifulSoup(html_text, BEAUTIFULSOUP_PARSER)

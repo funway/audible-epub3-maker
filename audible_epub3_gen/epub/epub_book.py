@@ -8,7 +8,6 @@ from pathlib import Path, PurePosixPath
 from dataclasses import dataclass
 from lxml import etree as ET
 
-from audible_epub3_gen.config import INPUT_DIR, OUTPUT_DIR
 from audible_epub3_gen.utils import logging_setup
 from audible_epub3_gen.epub.utils import guess_media_type, parse_xml, list_files_in_zip
 
@@ -151,6 +150,25 @@ class EpubImage(EpubItem): pass
 class EpubException(Exception): pass
 
 class EpubBook:
+    """
+    EPUB book structure. Refers to: https://www.w3.org/TR/epub-33/
+    """
+    '''
+    EPUB (.epub ZIP)
+        ├─ mimetype                 # required file (fixed name), must be the first file in ZIP container
+        ├─ META-INF/container.xml   # required file (fixed path and name), points to .opf file
+        ├─ OEBPS/package.opf        # required file (no-fixed path and name), 
+            ├─ <metadata>           # required first elem under opf <package>
+                ├─ <dc:identifier>      # required elem
+                ├─ <dc:title>           # required elem
+                ├─ <dc:language>        # required elem
+            ├─ <manifest>           # required second elem under opf <package>, list of all resource files (should but not forced)
+            ├─ <spine>              # reuqired third elem under opf <package>, define reading order for EPUB reader.
+        ├─ [nav].xhtml / toc.ncx    # table of content (toc.ncx is kept for old version)
+        ├─ [chapter1].xhtml         # actual content files
+        ├─ images/, fonts/          # optional and no-fixed path name, supporting assets
+    '''
+
     DEFAULT_OPTIONS = {
         # 'item_lazy_load_threshold': 16*1024*1024,
         'item_lazy_load_threshold': 50*1024,
@@ -162,9 +180,13 @@ class EpubBook:
         self.options = dict(__class__.DEFAULT_OPTIONS)
         self.options.update(options)
 
-        self.container_root: ET._Element = None  # container.xml 解析后的 ElementTree 根节点
-        self.opf_path: str = None  # .opf 文件路径 (container.xml 中定义的字符串)
-        self.opf_root: ET._Element = None  # .opf 文件解析后的 ElementTree 根节点
+        self.container_root: ET._Element = None # container.xml 解析后的 ElementTree 根节点
+        self.opf_path: str = None               # .opf 文件路径 (container.xml 中定义的字符串)
+        self.opf_root: ET._Element = None       # .opf 文件解析后的 ElementTree 根节点
+
+        self.identifier = None
+        self.title = None
+        self.language = None
 
         self.items: list[EpubItem] = []  # EpubItem 对象
 
@@ -215,6 +237,19 @@ class EpubBook:
         target_item.attrs["media-overlay"] = item.id
         pass
 
+    def _read_required_metadata(self):
+        metadata = self.metadata
+        if metadata is None:
+            raise EpubException("No <metadata> found in opf")
+        
+        try:
+            self.identifier = metadata.find("dc:identifier", namespaces=NAMESPACES).text.strip()
+            self.title = metadata.find("dc:title", namespaces=NAMESPACES).text.strip()
+            self.language = metadata.find("dc:language", namespaces=NAMESPACES).text.strip()
+        except Exception as e:
+            raise EpubException("Missing required metadata: dc:identifier, dc:title, or dc:language") from e
+        pass
+
     def _read_epub(self, epub_path):
         logger.debug(f"Loading epub: {epub_path}")
         with zipfile.ZipFile(epub_path, "r") as zf:
@@ -240,15 +275,18 @@ class EpubBook:
             
             # 3.1 metadata
             # use self.metadata property
+            self._read_required_metadata()
 
             # 3.2 manifest
             manifest_elem = self.opf_root.find(".//opf:manifest", namespaces=NAMESPACES)
+            if manifest_elem is None:
+                raise EpubException("No <manifest> found in opf")
             manifest_items = {}
             for item_elem in manifest_elem:
                 href = item_elem.attrib["href"]
                 zip_href = self.to_zip_href(href)
                 manifest_items[zip_href] = item_elem
-            logger.debug(f"All manifest files: {sorted(manifest_items.keys())}")
+            # logger.debug(f"All manifest files: {sorted(manifest_items.keys())}")
             
             all_files = list_files_in_zip(zf)
             ignored_files = {
@@ -257,7 +295,7 @@ class EpubBook:
                 self.opf_path,
             }
             all_files = sorted(all_files - ignored_files)
-            logger.debug(f"All zip files: {all_files}")
+            # logger.debug(f"All zip files: {all_files}")
             for zip_href in all_files:
                 lazy_load = LazyLoadFromZip(self.epub_path, zip_href)
                 
@@ -299,6 +337,8 @@ class EpubBook:
 
             # 3.3 spine
             # use self.spine property
+            if self.spine is None:
+                raise EpubException("No <spine> found in opf")
             
             pass
         pass
@@ -310,7 +350,7 @@ class EpubBook:
         zip_href = str(PurePosixPath(self.opf_path).parent / opf_href)
         return zip_href
 
-    def get_chapters(self) -> EpubHTML:
+    def get_chapters(self) -> list[EpubHTML]:
         logger.debug(f"Getting chapters from {self.epub_path.name}")
         
         spine_elem = self.spine

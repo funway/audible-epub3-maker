@@ -5,7 +5,6 @@ import unicodedata
 from audible_epub3_gen.utils import logging_setup
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.WARNING)
 
 DELIMITERS=set([
     '.', '?', '!', ',', ';',     # English

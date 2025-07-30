@@ -1,86 +1,87 @@
-from rapidfuzz import fuzz
+import argparse
+import logging
+from pathlib import Path
 
-def test_fuzz():
-    texts = ("多符号与空格", "this is a 中文测试", "this  is  a  中文测试!")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    print(texts, "partial_ratio:", fuzz.partial_ratio(texts[1], texts[2]))
-    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
-    print(texts, "token_set_ratio:", fuzz.token_set_ratio(texts[1], texts[2]))
+from audible_epub3_gen.config import settings
+from audible_epub3_gen.app import App
 
-    texts = ("单词", "It's", "Its")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    print(texts, "partial_ratio:", fuzz.partial_ratio(texts[1], texts[2]))
-    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
-    print(texts, "token_set_ratio:", fuzz.token_set_ratio(texts[1], texts[2]))
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Generate Audible-style EPUB with TTS narration.",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
 
-    texts = ("大小写", "apple", "Apple")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    print(texts, "partial_ratio:", fuzz.partial_ratio(texts[1], texts[2]))
-    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
-    print(texts, "token_set_ratio:", fuzz.token_set_ratio(texts[1], texts[2]))
+    # 1. input_file 作为位置参数
+    parser.add_argument("input_file", 
+                        type=Path, 
+                        help="Input EPUB file"
+                        )
 
-    texts = ("中文+空格", "我叫王富贵。", "我 叫 王 富贵。")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    print(texts, "partial_ratio:", fuzz.partial_ratio(texts[1], texts[2]))
-    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
-    print(texts, "token_set_ratio:", fuzz.token_set_ratio(texts[1], texts[2]))
+    # 2. 输出目录参数，支持 -d 和 --output_dir
+    parser.add_argument(
+        "-d", "--output_dir",
+        type=Path,
+        help="Output directory (default: <input_file>_audible)"
+    )
 
-    texts = ("中文+空格", "我叫王富贵。", "我叫 王富 贵。")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    print(texts, "partial_ratio:", fuzz.partial_ratio(texts[1], texts[2]))
-    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
-    print(texts, "token_set_ratio:", fuzz.token_set_ratio(texts[1], texts[2]))
+    # 3. 日志等级
+    parser.add_argument(
+        "--log_level",
+        type=str.upper,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Logging level"
+    )
 
-    texts = ("英文无空格", "My name is Fengwei Wang.", "MynameisFengweiWang")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    print(texts, "partial_ratio:", fuzz.partial_ratio(texts[1], texts[2]))
-    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
-    print(texts, "token_set_ratio:", fuzz.token_set_ratio(texts[1], texts[2]))
+    # 4. TTS 引擎
+    parser.add_argument(
+        "--tts_engine",
+        type=str.lower,
+        choices=["azure", "kokoro"],
+        default="azure",
+        help=(
+            "TTS engine to use (default: azure). \n"
+            "Voice & language references: \n"
+            "  Azure: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts \n"
+            "  Kokoro: https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md"
+        )
+    )
 
-    # 渐进，取最大的时
-    print(fuzz.token_sort_ratio("this is a 中文测试", "is  a 中文  测试"))
-    print(fuzz.token_sort_ratio("this is a 中文测试", "this  is  a 中文  测"))
-    print(fuzz.token_sort_ratio("this is a 中文测试", "this  is  a 中文  测试"))
-    print(fuzz.token_sort_ratio("this is a 中文测试", "this  is  a 中文  测试!"))
+    # 5. TTS 语言
+    parser.add_argument(
+        "--tts_lang",
+        default="en-US",
+        help="Language code for TTS (default: en-US for Azure)"
+    )
 
-    texts = ("渐进测试", "My name is Fengwei.", "Hello,  My  name is")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
-    texts = ("渐进测试", "My name is Fengwei.", "Hello, My name is Funway")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
-    texts = ("渐进测试", "My name is Fengwei.", "Hello, My name is Funway.")  # 命中右边界
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
-    texts = ("渐进测试", "My name is Fengwei.", "Hello, My name is Funway. How")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
-    texts = ("渐进测试", "My name is Fengwei.", "Hello, My name is Funway. How are")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
-    texts = ("渐进测试", "My name is Fengwei.", "My name is Funway.")  # 命中左边界
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    print(texts, "token_sort_ratio:", fuzz.token_sort_ratio(texts[1], texts[2]))
+    # 6. TTS 声音
+    parser.add_argument(
+        "--tts_voice",
+        default="en-US-AvaMultilingualNeural",
+        help="Voice name for TTS (default: en-US-AvaMultilingualNeural for Azure)"
+    )
+
+    parser.add_argument(
+        "-f", "--force",
+        action="store_true",
+        default=False,
+        help="Force all prompts to be accepted (non-interactive mode)"
+    )
+
+    return parser.parse_args()
 
 
-    texts = ("只差一个字符", "MynamesFengweiWang.", "MynameisFengweiWang.")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    texts = ("只差一个字符", "hi", "he")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    texts = ("只差一个字符", "MynamesFengweiWang. hello, howareyou.nicetomeetyou", "MynameisFengweiWang. hello, howareyou.nicetomeetyou")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
+def main():
+    args = vars(parse_args())
+    settings.update_args(args)
+    
+    from audible_epub3_gen.utils import logging_setup
 
-    texts = ("测试", "hewasanoldmanwhofishedaloneinaskiffinthegulfstreamandhehadgoneeighty–fourdaysnowwithouttakingafish.", "seahewasanoldmanwhofishedaloneinaskiffinthegulfstreamandhehadgoneeighty–fourdaysnowwithouttakingafish.")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    texts = ("测试", "hewasanoldmanwhofishedaloneinaskiffinthegulfstreamandhehadgoneeighty–fourdaysnowwithouttakingafish.", "seahewasanoldmanwhofishedaloneinaskiffinthegulfstreamandhehadgoneeighty–fourdaysnowwithouttakingafish.\"he's")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    texts = ("测试", "hewasanoldmanwhofishedaloneinaskiffinthegulfstreamandhehadgoneeighty–fourdaysnowwithouttakingafish.", "seahewasanoldmanwhofishedaloneinaskiffinthegulfstreamandhehadgoneeighty–fourdaysnowwithouttakingafish.")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-    texts = ("测试", "hewasanoldmanwhofishedaloneinaskiffinthegulfstreamandhehadgoneeighty–fourdaysnowwithouttakingafish.", "seahewasanoldmanwhofishedaloneinaskiffinthegulfstreamandhehadgoneeighty–fourdaysnowwithouttakingafish.")
-    print(texts, "ratio:", fuzz.ratio(texts[1], texts[2]))
-
+    app = App()
+    app.run()
     pass
 
+
 if __name__ == "__main__":
-    # main()
-    test_fuzz()
+    print(__name__)
+    main()

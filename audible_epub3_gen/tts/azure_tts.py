@@ -1,4 +1,4 @@
-import logging, re, html, io
+import logging, re, html
 from pathlib import Path
 from bs4 import BeautifulSoup
 from pydub import AudioSegment
@@ -8,7 +8,8 @@ import azure.cognitiveservices.speech as speechsdk
 from audible_epub3_gen.utils import logging_setup
 from audible_epub3_gen.utils import helpers
 from audible_epub3_gen.utils.types import WordBoundary, TagAlignment
-from audible_epub3_gen.config import AZURE_TTS_KEY, AZURE_TTS_REGION, BEAUTIFULSOUP_PARSER, SEG_MARK_ATTR, settings
+from audible_epub3_gen.utils.constants import BEAUTIFULSOUP_PARSER, SEG_MARK_ATTR
+from audible_epub3_gen.config import AZURE_TTS_KEY, AZURE_TTS_REGION, settings
 from audible_epub3_gen.tts.base_tts import BaseTTS
 from audible_epub3_gen.segmenter import html_segmenter, text_segmenter
 
@@ -28,9 +29,11 @@ class AzureTTS(BaseTTS):
     
     @staticmethod
     def get_break_ssml(break_time_ms: int = 500) -> str:
-        """Returns a SSML break tag with the specified time in milliseconds."""
-        # Adding `\n` before the <break> tag helps improve the stability of word boundary detection, 
-        # by preventing the lack of effective delimiters between words surrounding a <break> tag.
+        """
+        Returns an SSML <break> tag with the given pause time in milliseconds.
+
+        A leading newline is added to improve word boundary detection between words surrounding a break.
+        """
         return f'\n<break time="{break_time_ms}ms" />'
 
     def word_boundary_cb(self, evt, word_boundaries: list):
@@ -58,7 +61,7 @@ class AzureTTS(BaseTTS):
         pass
 
     def _break_html_into_text_chunks(self, html_text: str) -> list[str]:
-        """将 HTML 正文内容切分成多个文本块，每个块的大小不超过 max_bytes_per_request 字节。
+        """将 HTML 正文内容切分成多个文本块 (会引入 SSML break 标签)，每个块的大小不超过 max_bytes_per_request 字节。
 
         Args:
             html_text (str): _description_
@@ -131,8 +134,8 @@ class AzureTTS(BaseTTS):
         
         result = synthesizer.speak_ssml_async(ssml).get()
         if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-            logger.debug("Speech synthesized to output.wav")
-            logger.debug(f"data size: {len(result.audio_data)/1024:.2f} KB")
+            logger.debug(f"Speech synthesized to {output_file}")
+            logger.debug(f"  data size: {len(result.audio_data)/1024:.2f} KB")
         else:
             logger.error(f"Speech synthesis failed: {result.reason}")
             logger.error(f"  Error details: {result.cancellation_details.error_details if result.cancellation_details else 'No error details'}")
@@ -215,88 +218,14 @@ class AzureTTS(BaseTTS):
 
         # 3. merge audio and word boundaries
         merged_audio, merged_wbs = self._merge_audio_chunks_and_word_boundaries(chunks)
-        for wb in merged_wbs:
-            logger.debug(f"wb: {wb}")
+        wbs_file = output_file.with_name(output_file.stem + ".wbs")
+        helpers.save_wbs_as_json(merged_wbs, wbs_file)
 
         # 4. save merged audio
         self._save_audio(merged_audio, output_file, metadata)
         
         return merged_wbs
   
-# 这个不应该放在某个 TTS 类里面了，应该是一个 utils 的函数，或者放到 EpubBook 类里？你觉得呢？
-def force_alignment_bak(html_text: str, tag_name: str, word_boundaries: list[WordBoundary]) -> list[TagAlignment]:
-    """
-    根据 html_text 中之前 segment and wrap 的标签 <span id="prefix+ddd">. 将其与 word_boundaries 中的字符时间进行对齐。
-    返回 [id: xxxx, time_stard: xxx, time_end: xxx] 列表。
-    你觉得应该给 [id: xxxx, time_stard: xxx, time_end: xxx] 这个三元组对象起个什么名字？ 叫做 Alignment?? 感觉不够清晰。
-
-    修改一下逻辑，首先要对两边都做 nomalize, 去掉所有空格，连续拼接在一起。
-    然后对于每个 sentence, 计算长度 N, 从 wb_text 中取前 N+10 个字符做相似度匹配，没匹配到就不管。继续下一个 sentence
-    """
-    if not len(word_boundaries):
-        logger.warning(f"Word boundaries is empty!")
-        return []
-    
-    soup = BeautifulSoup(html_text, BEAUTIFULSOUP_PARSER)
-    segment_elems = soup.select(f"{tag_name}[{SEG_MARK_ATTR}]")
-    segments = [ (tag["id"], tag.get_text()) for tag in segment_elems]
-    logger.debug(f"segments: {segments}")
-    
-    result_alignments = []
-    cur_left  = 0  # 当前从 wbs 中取词的起点
-    cur_right = 0  # 当前从 wbs 中取词的终点+1 (= 下一次起点)
-    
-    for seg_id, seg_text in segments:
-        logger.debug(f"force alignment: {seg_id}, {seg_text}")
-        seg_text = seg_text.strip().lower()
-        max_similarity = 0
-        if not seg_text:
-            continue
-        
-        cur_left = cur_right  # 初始化此次取 wb 的起点
-        if cur_left >= len(word_boundaries):
-            logger.warning(f"All word boundaries have been consumed, but some segment texts remain unaligned!")
-            break
-        
-        # wb_sentence 扩展右边界，达到最大相似度
-        while cur_right < len(word_boundaries):
-            cur_right += 1
-            wb_consumed = word_boundaries[cur_left: cur_right]
-            wb_sentence = helpers.join_words(wb_consumed, "zh")
-            cur_similarity = fuzz.token_sort_ratio("".join(seg_text.split()), wb_sentence.lower())
-            logger.debug(f"similarity: {cur_similarity:.2f}, origin: {seg_text} 🆚 wb_sentence: {wb_sentence}")
-            if cur_similarity >= max_similarity:
-                max_similarity = cur_similarity
-                continue
-            else:
-                cur_right -= 1
-                break
-        # wb_sentence 收缩左边界，达到最大相似度
-        while cur_left < cur_right:
-            cur_left += 1
-            wb_consumed = word_boundaries[cur_left: cur_right]
-            wb_sentence = helpers.join_words(wb_consumed, "zh")
-            cur_similarity = fuzz.token_sort_ratio("".join(seg_text.split()), wb_sentence.lower())
-            logger.debug(f"similarity: {cur_similarity:.2f}, origin: {seg_text} 🆚 wb_sentence: {wb_sentence}")
-            if cur_similarity > max_similarity:
-                max_similarity = cur_similarity
-                continue
-            else:
-                cur_left -= 1  # restore left pointer
-                break
-        
-        # Now, word_boundaries[cur_left: cur_right] is the most similar to the seg_text
-        wb_consumed = word_boundaries[cur_left: cur_right]
-        wb_sentence = helpers.join_words(wb_consumed, settings.tts_lang)
-        logger.debug(f"Max similarity: {max_similarity:.2f}, origin: {seg_text} 🆚 wb_sentence: {wb_sentence}")
-        alignment = TagAlignment(tag_id = seg_id, 
-                                 start_ms = word_boundaries[cur_left].start_ms,
-                                 end_ms = word_boundaries[cur_right-1].end_ms,
-                                 )
-        logger.debug(f"New alignment: {alignment}")
-        result_alignments.append(alignment)
-            
-    return result_alignments
 
 def main():
     # === 输入文本 (SSML with style & break) ===
@@ -304,7 +233,7 @@ def main():
     <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis"
         xmlns:mstts="http://www.w3.org/2001/mstts"
         xml:lang="en-US">
-    <voice name="en-US-AvaMultilingualNeural">
+    <voice name="en-us-avaMultilingualNeural">
         <mstts:express-as style="narration">
         <prosody rate="0%">
             <mark name="ae001"/> Hello,World! It's 2025! 哈哈！Let<mark name="ae998"/>'s see what happens<mark name="ae001_end"/>.
@@ -390,9 +319,51 @@ def test():
 <link rel="stylesheet" type="text/css" href="docbook-epub.css"/><meta name="generator" content="DocBook XSL Stylesheets Vsnapshot_9885"/>
 <style type="text/css"> img { max-width: 100%; }</style>
 </head>
-<body><header/><section class="chapter" title="The Old Man and the Sea" epub:type="chapter" id="id70295538646860"><div class="titlepage"><div><div><h1 class="title">The Old Man and the Sea</h1></div></div></div><p><span class="strong" id="xx003" data-ae-x="1">He was an old man who fished alone in a skiff in the Gulf Stream and he had gone <strong>eighty–four</strong> days now without taking a fish.</span> <span class="strong" id="xx005" data-ae-x="1">"<i>he</i>'s so good." said Mrs Wei.</span></p>
-<span class="strong" id="xx001" data-ae-x="1">The sky is <strong>blue</strong>. The grass</span> is green. 咱们试试中英文吧？</section></body>
+<body><header/><section class="chapter" title="The Old Man and the Sea" epub:type="chapter" id="id70295538646860"><div class="titlepage"><div><div><h1 class="title"><span class="strong" id="xx013" data-ae-x="1">The Old Man and the Sea</span></h1></div></div></div><p><span class="strong" id="xx003" data-ae-x="1">He was an old man who fished alone in a skiff in the Gulf Stream and he had gone <strong>eighty–four</strong> days now without taking a fish.</span> <span class="strong" id="xx005" data-ae-x="1">"</span><i><span id="xx006" data-ae-x="1">he</span></i><span id="xx007" data-ae-x="1">'s so good." said Mrs Wei.</span></p>
+<span class="strong" id="xx001" data-ae-x="1">The sky he is <strong>blue</strong>. The grass</span> is green. 咱们试试中英文吧？</section></body>
 </html>'''
+
+    html = '''
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>受戒</title>
+<meta content="text/html; charset=utf-8" http-equiv="Content-Type"/>
+<link href="stylesheet.css" rel="stylesheet" type="text/css"/>
+<link href="page_styles.css" rel="stylesheet" type="text/css"/>
+</head>
+<body class="calibre"><div class="calibre1" id="filepos109"><p class="calibre2"><span class="calibre3"><span class="bold"><span data-ae-x="1" id="ae00001">《受戒》汪曾祺</span></span></span></p><p class="calibre4"><span data-ae-x="1" id="ae00002">《二○○六年十一月廿七日版》</span><br class="calibre1"/><span data-ae-x="1" id="ae00003"> 《好讀書櫃》經典版</span><br class="calibre1"/>
+<br class="calibre1"/>
+<br class="calibre1"/><span data-ae-x="1" id="ae00004"> 　　明海出家已經四年了。</span><br class="calibre1"/>
+<br class="calibre1"/><span data-ae-x="1" id="ae00005"> 　　他是十三歲來的。</span><br class="calibre1"/>
+<br class="calibre1"/><span data-ae-x="1" id="ae00006"> 　　這個地方的地名有點怪，</span><span data-ae-x="1" id="ae00007">叫庵趙莊。</span><span data-ae-x="1" id="ae00008">趙，</span><span data-ae-x="1" id="ae00009">是因為莊上大都姓趙。</span><span data-ae-x="1" id="ae00010">叫做莊，</span><span data-ae-x="1" id="ae00011">可是人家住得很分散，</span><span data-ae-x="1" id="ae00012">這裡兩三家，</span><span data-ae-x="1" id="ae00013">那裡兩三家。</span><span data-ae-x="1" id="ae00014">一出門，</span><span data-ae-x="1" id="ae00015">遠遠可以看到，</span><span data-ae-x="1" id="ae00016">走起來得走一會，</span><span data-ae-x="1" id="ae00017">因為沒有大路，</span><span data-ae-x="1" id="ae00018">都是彎彎曲曲的田埂。</span><span data-ae-x="1" id="ae00019">庵，</span><span data-ae-x="1" id="ae00020">是因為有一個庵。</span><span data-ae-x="1" id="ae00021">庵叫苦提庵，</span><span data-ae-x="1" id="ae00022">可是大家叫訛了，</span><span data-ae-x="1" id="ae00023">叫成荸薺庵。</span><span data-ae-x="1" id="ae00024">連庵裡的和尚也這樣叫。</span><span data-ae-x="1" id="ae00025">「寶剎何處？」</span><span data-ae-x="1" id="ae00026">－－「荸薺庵。」</span><span data-ae-x="1" id="ae00027">庵本來是住尼姑的。</span><span data-ae-x="1" id="ae00028">「和尚廟」、「尼姑庵」嘛。</span><span data-ae-x="1" id="ae00029">可是荸薺庵住的是和尚。</span><span data-ae-x="1" id="ae00030">也許因為荸薺庵不大，</span><span data-ae-x="1" id="ae00031">大者為廟，</span><span data-ae-x="1" id="ae00032">小者為庵。</span><br class="calibre1"/>
+<br class="calibre1"/><span data-ae-x="1" id="ae00033"> 　　明海在家叫小明子。</span><span data-ae-x="1" id="ae00034">他是從小就確定要出家的。</span><span data-ae-x="1" id="ae00035">他的家鄉不叫「出家」，</span><span data-ae-x="1" id="ae00036">叫「當和尚」。</span><span data-ae-x="1" id="ae00037">他的家鄉出和尚。</span><span data-ae-x="1" id="ae00038">就像有的地方出劁豬的，</span><span data-ae-x="1" id="ae00039">有的地方出織蓆子的，</span><span data-ae-x="1" id="ae00040">有的地方出箍桶的，</span><span data-ae-x="1" id="ae00041">有的地方出彈棉花的，</span><span data-ae-x="1" id="ae00042">有的地方出畫匠，</span><span data-ae-x="1" id="ae00043">有的地方出婊子，</span><span data-ae-x="1" id="ae00044">他的家鄉出和尚。</span><span data-ae-x="1" id="ae00045">人家弟兄多，</span><span data-ae-x="1" id="ae00046">就派一個出去當和尚。</span><span data-ae-x="1" id="ae00047">當和尚也要通過關係，</span><span data-ae-x="1" id="ae00048">也有幫。</span><span data-ae-x="1" id="ae00049">這地方的和尚有的走得很遠。</span><span data-ae-x="1" id="ae00050">有到杭州靈隱寺的、上海靜安寺的、鎮江金山寺的、揚州天寧寺的。</span><span data-ae-x="1" id="ae00051">一般的就在本縣的寺廟。</span><span data-ae-x="1" id="ae00052">明海家田少，</span><span data-ae-x="1" id="ae00053">老大、老二、老三，</span><span data-ae-x="1" id="ae00054">就足夠種的了。</span><span data-ae-x="1" id="ae00055">他是老四。</span><span data-ae-x="1" id="ae00056">他七歲那年，</span><span data-ae-x="1" id="ae00057">他當和尚的舅舅回家，</span><span data-ae-x="1" id="ae00058">他爹、他娘就和舅舅商議，</span><span data-ae-x="1" id="ae00059">決定叫他當和尚。</span><span data-ae-x="1" id="ae00060">他當時在旁邊，</span><span data-ae-x="1" id="ae00061">覺得這實在是在情在理，</span><span data-ae-x="1" id="ae00062">沒有理由反對。</span><span data-ae-x="1" id="ae00063">當和尚有很多好處。</span><span data-ae-x="1" id="ae00064">一是可以吃現成飯。</span><span data-ae-x="1" id="ae00065">哪個廟裡都是管飯的。</span><span data-ae-x="1" id="ae00066">二是可以攢錢。</span><span data-ae-x="1" id="ae00067">只要學會了放瑜伽焰口，</span><span data-ae-x="1" id="ae00068">拜梁皇懺，</span><span data-ae-x="1" id="ae00069">可以按例分到辛苦錢。</span><span data-ae-x="1" id="ae00070">積攢起來，</span><span data-ae-x="1" id="ae00071">將來還俗娶親也可以；</span><span data-ae-x="1" id="ae00072">不想還俗，</span><span data-ae-x="1" id="ae00073">買幾畝田也可以。</span><span data-ae-x="1" id="ae00074">當和尚也不容易，</span><span data-ae-x="1" id="ae00075">一要面如朗月，</span><span data-ae-x="1" id="ae00076">二要聲如鐘磬，</span><span data-ae-x="1" id="ae00077">三要聰明記性好。</span><span data-ae-x="1" id="ae00078">他舅舅給他相了相面，</span><span data-ae-x="1" id="ae00079">叫他前走幾步，</span><span data-ae-x="1" id="ae00080">後走幾步，</span><span data-ae-x="1" id="ae00081">又叫他喊了一聲趕牛打場的號子：「格當了－－」，</span><span data-ae-x="1" id="ae00082">說是「明子準能當個好和尚，</span><span data-ae-x="1" id="ae00083">我包了！」</span><span data-ae-x="1" id="ae00084">要當和尚，</span><span data-ae-x="1" id="ae00085">得下點本，</span><span data-ae-x="1" id="ae00086">－－念幾年書。</span><span data-ae-x="1" id="ae00087">哪有不認字的和尚呢！</span><span data-ae-x="1" id="ae00088">於是明子就開蒙入學，</span><span data-ae-x="1" id="ae00089">讀了《三字經》、《百家姓》、《四言雜字》、《幼學瓊林》、《上論、下論》、《上孟、下孟》，</span><span data-ae-x="1" id="ae00090">每天還寫一張仿。</span><span data-ae-x="1" id="ae00091">村裡都誇他字寫得好，</span><span data-ae-x="1" id="ae00092">很黑。</span><br class="calibre1"/>
+</body>
+</html>
+    '''
+
+    html = '''
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><meta content="application/xhtml+xml; charset=utf-8" http-equiv="Content-Type"/>
+<link href="page-template.xpgt" rel="stylesheet" type="application/vnd.adobe-page-template+xml"/>
+<title>Harry Potter and the Prisoner of Azkaban - Chapter 3</title>
+<link href="flow0001.css" rel="stylesheet" type="text/css"/>
+</head>
+<body style="font-family:serif;"><div/>
+<p class="pagebreak EPubfirstparagraph Epubpagerstart" id="hp3_ch3"> </p>
+<p> </p>
+<h4><span data-ae-x="1" id="ae00001">– CHAPTER THREE –</span></h4>
+<p> </p>
+<h1 class="chaptitle"><span data-ae-x="1" id="ae00002">The Knight Bus</span></h1>
+<p class="first"><span data-ae-x="1" id="ae00003">Harry was several streets away before he collapsed onto a low wall in Magnolia Crescent,</span><span data-ae-x="1" id="ae00004"> panting from the effort of dragging his trunk.</span><span data-ae-x="1" id="ae00005"> He sat quite still,</span><span data-ae-x="1" id="ae00006"> anger still surging through him,</span><span data-ae-x="1" id="ae00007"> listening to the frantic thumping of his heart.</span></p>
+<p><span data-ae-x="1" id="ae00008">But after ten minutes alone in the dark street,</span><span data-ae-x="1" id="ae00009"> a new emotion overtook him: panic.</span><span data-ae-x="1" id="ae00010"> Whichever way he looked at it,</span><span data-ae-x="1" id="ae00011"> he had never been in a worse fix.</span><span data-ae-x="1" id="ae00012"> He was stranded,</span><span data-ae-x="1" id="ae00013"> quite alone,</span><span data-ae-x="1" id="ae00014"> in the dark Muggle world,</span><span data-ae-x="1" id="ae00015"> with absolutely nowhere to go.</span><span data-ae-x="1" id="ae00016"> And the worst of it was,</span><span data-ae-x="1" id="ae00017"> he had just done serious magic,</span><span data-ae-x="1" id="ae00018"> which meant that he was almost certainly expelled from Hogwarts.</span><span data-ae-x="1" id="ae00019"> He had broken the Decree for the Restriction of Underage Wizardry so badly,</span><span data-ae-x="1" id="ae00020"> he was surprised Ministry of Magic representatives weren’t swooping down on him where he sat.</span></p>
+<p><span data-ae-x="1" id="ae00021">Harry shivered and looked up and down Magnolia Crescent.</span><span data-ae-x="1" id="ae00022"> What was going to happen to him?</span><span data-ae-x="1" id="ae00023"> Would he be arrested,</span><span data-ae-x="1" id="ae00024"> or would he simply be outlawed from the wizarding world?</span><span data-ae-x="1" id="ae00025"> He thought of Ron and Hermione,</span><span data-ae-x="1" id="ae00026"> and his heart sank even lower.</span><span data-ae-x="1" id="ae00027"> Harry was sure that,</span><span data-ae-x="1" id="ae00028"> criminal or not,</span><span data-ae-x="1" id="ae00029"> Ron and Hermione would want to help him now,</span><span data-ae-x="1" id="ae00030"> but they were both abroad,</span><span data-ae-x="1" id="ae00031"> and with Hedwig gone,</span><span data-ae-x="1" id="ae00032"> he had no means of contacting them.</span></p>
+<p><span data-ae-x="1" id="ae00033">He didn’t have any Muggle money,</span><span data-ae-x="1" id="ae00034"> either.</span><span data-ae-x="1" id="ae00035"> There was a little wizard gold in the moneybag at the bottom of his trunk,</span><span data-ae-x="1" id="ae00036"> but the rest of the fortune his parents had left him was stored in a vault at Gringotts Wizarding Bank in London.</span><span data-ae-x="1" id="ae00037"> He’d never be able to drag his trunk all the way to London.</span><span data-ae-x="1" id="ae00038"> Unless …</span></p>
+<p><span data-ae-x="1" id="ae00039">He looked down at his wand,</span><span data-ae-x="1" id="ae00040"> which he was still clutching in his hand.</span><span data-ae-x="1" id="ae00041"> If he was already expelled (his heart was now thumping painfully fast),</span><span data-ae-x="1" id="ae00042"> a bit more magic couldn’t hurt.</span><span data-ae-x="1" id="ae00043"> He had the Invisibility Cloak he had inherited from his father – what if he bewitched the trunk to make it feather-light,</span><span data-ae-x="1" id="ae00044"> tied it to his broomstick,</span><span data-ae-x="1" id="ae00045"> covered himself in the Cloak and flew to London?</span><span data-ae-x="1" id="ae00046"> Then he could get the rest of his money out of his vault and … begin his life as an outcast.</span><span data-ae-x="1" id="ae00047"> It was a horrible prospect,</span><span data-ae-x="1" id="ae00048"> but he couldn’t sit on this wall for ever or he’d find himself trying to explain to Muggle police why he was out in the dead of night with a trunkful of spellbooks and a broomstick.</span></p>
+<p><span data-ae-x="1" id="ae00049">Harry opened his trunk again and pushed the contents aside,</span><span data-ae-x="1" id="ae00050"> looking for the Invisibility Cloak – but before he had found it,</span><span data-ae-x="1" id="ae00051"> he straightened up suddenly,</span><span data-ae-x="1" id="ae00052"> looking around him once more.</span></p>
+<p><span data-ae-x="1" id="ae00053">A funny prickling on the back of his neck had made Harry feel he was being watched,</span><span data-ae-x="1" id="ae00054"> but the street appeared to be deserted,</span><span data-ae-x="1" id="ae00055"> and no lights shone from any of the large square houses.</span></p>
+</body></html>
+'''
 
     tts = AzureTTS()
     wb_list = tts.html_to_speech(html, "output.mp3", metadata={})
@@ -403,9 +374,10 @@ def test():
     segments = [ tag.get_text() for tag in segment_elems]
     logger.debug(f"segments: {segments}")
     alignments = helpers.force_alignment(segments, wb_list)
+    logger.debug(alignments)
     pass
 
 
 if __name__ == "__main__":
-    # main()
-    test()
+    main()
+    # test()
