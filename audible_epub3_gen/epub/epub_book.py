@@ -139,6 +139,12 @@ class EpubTextItem(EpubItem):
     def set_text(self, text: str):
         self.set_raw(text.encode())
 
+    def count_chars(self, with_whitespace: bool = True) -> int:
+        if with_whitespace:
+            return len(self.get_text())
+        else:
+            return len(re.sub(r"\s+", "", self.get_text()))
+
 class EpubNcx(EpubTextItem): pass
 class EpubHTML(EpubTextItem): pass
 class EpubNavHTML(EpubHTML): pass
@@ -351,10 +357,25 @@ class EpubBook:
         return zip_href
 
     def get_chapters(self) -> list[EpubHTML]:
+        """Returns the linear reading items in the EPUB spine, excluding navigation pages.
+
+        This method returns a list of EpubHTML items that:
+            - Appear in the spine with linear="yes" (i.e., meant to be read in order)
+            - Are not navigation documents (e.g., EPUB TOC)
+
+        Note:
+            The returned list may include non-chapter items such as forewords, appendices, 
+            or image pages, depending on how the EPUB is structured.
+
+        Returns:
+            list[EpubHTML]: Ordered list of main content items in reading sequence
+        """
         logger.debug(f"Getting chapters from {self.epub_path.name}")
         
         spine_elem = self.spine
         itemrefs = spine_elem.findall("opf:itemref", namespaces=NAMESPACES)
+        
+        # skip no linear items
         idrefs = [r.attrib["idref"] for r in itemrefs if r.attrib.get("linear", "yes") != "no"]
 
         chapters = []
@@ -511,7 +532,7 @@ def create_epub_item(raw_content: bytes | LazyLoad, id: str, href: str, media_ty
 def main():
     from audible_epub3_gen.segmenter.html_segmenter import html_segment_and_wrap
 
-    epub_files = INPUT_DIR.glob('*.epub')
+    epub_files = Path('input/').glob('*old*.epub')
     for epub_file in epub_files:
         logger.debug(f"Start Processing: {epub_file}")
         book = EpubBook(epub_file)
@@ -527,9 +548,9 @@ def main():
             modified_content = html_segment_and_wrap(chapter.get_text())
             chapter.set_text(modified_content)
 
-        output_path = OUTPUT_DIR / f"{epub_file.stem}_new.epub"
+        output_path = Path('output') / f"{epub_file.stem}_new.epub"
         book.save_epub(output_path)
-        logger.debug("Done processing.\n")
+        logger.debug("Done processing.")
     pass
 
 if __name__ == "__main__":

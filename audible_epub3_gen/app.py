@@ -8,28 +8,9 @@ from audible_epub3_gen.utils import logging_setup
 from audible_epub3_gen.utils.constants import BASE_DIR
 from audible_epub3_gen.epub.epub_book import EpubBook, EpubHTML
 from audible_epub3_gen.segmenter.html_segmenter import html_segment_and_wrap
+from audible_epub3_gen.worker import init_worker, task_fn
 
 logger = logging.getLogger(__name__)
-
-def init_worker(settings_dict, log_queue):
-    """
-    Subprocess initializer
-    """
-    # Explicitly import for safe
-    from audible_epub3_gen.config import settings
-    from audible_epub3_gen.utils import logging_setup
-
-    # settings
-    settings.update(settings_dict)
-
-    # logging
-    logging_setup.setup_logging_for_worker(log_queue)
-    logging.getLogger().setLevel(getattr(logging, settings.log_level, logging.INFO))
-    logger = logging.getLogger(__name__)
-
-    logger.debug("Worker process initialized.")
-    pass
-
 
 class App(object):
     """docstring for App."""
@@ -64,7 +45,11 @@ class App(object):
                                            logging_setup.get_log_queue(), 
                                            )
                                  ) as executor:
-            results = executor.map(helpers.test_mp, chapters)
+            # Block the main thread of main process, waiting for results from all subprocesses.
+            results = executor.map(task_fn, chapters)
+            
+            # for result in results:
+            #     logger.debug(f"main proceess got: {result}")
         
-        logger.debug(f"结束")
+        logger.debug(f"主进程结束")
         pass

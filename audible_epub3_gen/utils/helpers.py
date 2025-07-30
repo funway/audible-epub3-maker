@@ -234,9 +234,3 @@ def confirm_or_exit(msg: str):
         logger.debug(f"{msg} → Aborted by user.")
         print("Aborted by user.")
         sys.exit(1)
-
-
-def test_mp(chapter):
-    logger.debug(f"测试 mp: {type(chapter)}, {chapter.href}")
-    logger.debug(f"当前 settings: {settings.__dict__}")
-    pass

@@ -51,8 +51,11 @@ def setup_logging_for_main():
         _log_queue = Queue()
     _log_listener = QueueListener(_log_queue, file_handler, console_handler)
     _log_listener.start()
-
+    
     root_logger.addHandler(QueueHandler(_log_queue))
+
+    # Register automatic shutdown hook
+    atexit.register(stop_logging)
     pass
 
 
@@ -87,9 +90,30 @@ def stop_logging():
     pass
 
 
-# Register automatic shutdown hook
-atexit.register(stop_logging)
+def setup_logging():
+    """
+    [DEPRECATED] Sets up logging configuration for single-process use.
+    """
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
 
+    root_logger = logging.getLogger()
+    root_logger.setLevel(getattr(logging, settings.log_level))
+
+    formatter = logging.Formatter(LOG_FORMAT)
+
+    file_handler = RotatingFileHandler(filename=LOG_FILE, 
+                                       mode='a', 
+                                       maxBytes=16*1024*1024,
+                                       backupCount=3,
+                                       encoding='utf-8',)
+    file_handler.setFormatter(formatter)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+
+    if not root_logger.hasHandlers():
+        root_logger.addHandler(file_handler)
+        root_logger.addHandler(console_handler)
 
 # Initialize logging when this module is first imported
 # Only runs in main process (no-op in subprocesses),
