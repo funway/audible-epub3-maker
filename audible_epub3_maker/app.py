@@ -112,5 +112,5 @@ class App(object):
         book.save_epub(epub_output_path)
 
         elapsed = time.perf_counter() - start_time
-        logger.info(f"🎉 Processing complete. EPUB saved to {epub_output_path} (finished in {elapsed:.2f}s)")
+        logger.info(f"🎉 Processing complete. EPUB saved to {epub_output_path} (finished in {helpers.format_seconds(elapsed)})")
         pass

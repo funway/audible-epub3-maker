@@ -318,6 +318,19 @@ def format_smil_time(ms: float) -> str:
     seconds = total_seconds % 60
     return f"{hours}:{minutes:02}:{seconds:02}.{milliseconds:03}"
 
+def format_seconds(seconds: float) -> str:
+    seconds = int(round(seconds))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+
+    parts = []
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0 or hours > 0:
+        parts.append(f"{minutes}m")
+    parts.append(f"{secs}s")
+    return " ".join(parts)
+
 def generate_smil(smil_href: str, xhtml_href: str, audio_href: str, alignments: list[TagAlignment]) -> str:
     """
     Generates a SMIL XML string for EPUB 3 Media Overlay.
