@@ -83,6 +83,6 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 
 ## 🙏 Acknowledgements
 
-- [EPUB Media Overlays 3.1](https://www.w3.org/TR/epub/#sec-media-overlays)
+- [EPUB 3](https://www.w3.org/TR/epub/)
 - [Azure Speech Service](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/get-started-text-to-speech)
 - [Kokoro TTS](https://huggingface.co/hexgrad/Kokoro-82M)
