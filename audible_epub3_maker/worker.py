@@ -2,7 +2,7 @@ import logging
 import traceback
 from bs4 import BeautifulSoup
 
-from audible_epub3_maker.config import settings
+from audible_epub3_maker.config import settings, in_dev
 from audible_epub3_maker.utils import logging_setup, helpers
 from audible_epub3_maker.utils.types import TaskPayload, TaskResult, TaskErrorResult
 from audible_epub3_maker.utils.constants import BEAUTIFULSOUP_PARSER, SEG_MARK_ATTR, SEG_TAG
@@ -43,16 +43,21 @@ def task_fn(payload: TaskPayload):
     # 1. TTS synthesis
     tts = create_tts_engine(settings.tts_engine)
     wb_list = tts.html_to_speech(original_html, audio_output_file)
-    logger.info(f"[task {payload.task_id}] 🔈 Generated audio: {audio_output_file}, Size: {helpers.format_bytes(audio_output_file.stat().st_size)}")
+    logger.info(f"[Task {payload.task_id}] 🔈 Generated audio: {audio_output_file}, Size: {helpers.format_bytes(audio_output_file.stat().st_size)}")
 
     # 2. Parse HTML and segment by new tag.
     segmented_html = html_segment_and_wrap(original_html)
+    if in_dev():
+        helpers.save_text(segmented_html, audio_output_file.with_suffix(".seg_html.txt"))
     
     # 3. force alignment
     soup = BeautifulSoup(segmented_html, BEAUTIFULSOUP_PARSER)
     segment_elems = soup.select(f"{SEG_TAG}[{SEG_MARK_ATTR}]")
     taged_segments = [(tag.get("id"), tag.get_text()) for tag in segment_elems]
-    alignments = helpers.force_alignment(taged_segments, wb_list, settings.fa_threshold)
+    alignments = helpers.force_alignment(taged_segments, 
+                                         wb_list, 
+                                         settings.align_threshold,
+                                         audio_output_file.with_suffix(".aligns.txt"))
     
     return TaskResult(task_id = payload.task_id,
                       taged_html = segmented_html,

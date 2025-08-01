@@ -26,7 +26,7 @@ class UserSettings:
         self.tts_chunk_len: int = -1  # Max chars length per chunk for a TTS request.
 
         # Force alignment similarity threshold
-        self.fa_threshold: float = 95.0
+        self.align_threshold: float = 95.0
 
         # Confirmation prompt
         self.force: bool = False  # Force all prompts to be accepted (non-interactive mode)

@@ -32,7 +32,7 @@ def setup_logging_for_main():
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     root_logger = logging.getLogger()
-    root_logger.setLevel(getattr(logging, settings.log_level, logging.INFO))
+    root_logger.setLevel(getattr(logging, settings.log_level.upper()))
     root_logger.handlers.clear()
 
     formatter = logging.Formatter(LOG_FORMAT)

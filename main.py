@@ -94,6 +94,16 @@ def parse_args():
         ),
     )
 
+    parser.add_argument(
+        "--align_threshold",
+        type=float,
+        default=95.0,
+        help=(
+            "Threshold for force alignment fuzzy matching (0–100).\n"
+            "Higher value means stricter alignment. Default: 95.0"
+        )
+    )
+
     return parser.parse_args()
 
 def main():

@@ -2,9 +2,12 @@ import logging
 import re
 import unicodedata
 
+from audible_epub3_maker.config import in_dev
 from audible_epub3_maker.utils import logging_setup
 
 logger = logging.getLogger(__name__)
+if not in_dev():
+    logger.setLevel(max(logger.getEffectiveLevel(), logging.INFO))
 
 DELIMITERS=set([
     '.', '?', '!', ',', ';',     # English
@@ -18,7 +21,7 @@ DIALOG_CLOSING_PUNCTUATION = set([
 
 ABBRS_NON_TERMINAL = set(["Mr.", "Mrs.", "Ms.", "Dr.", "Prof."])
 ABBRS_MAY_TERMINAL = set(["U.S.", "U.S.A.", "U.K.", "U.N.", "Inc.", "Ltd."])
-ABBREVIATIONS = ABBRS_NON_TERMINAL | ABBRS_MAY_TERMINAL
+ABBREVIATIONS = sorted(ABBRS_NON_TERMINAL | ABBRS_MAY_TERMINAL, key=len, reverse=True)
 
 def replace_non_terminal_dot(text: str, replacement: str = "_DOT_") -> str:
     """Replaces non-terminal dots in the text with a specified replacement string.
@@ -31,10 +34,9 @@ def replace_non_terminal_dot(text: str, replacement: str = "_DOT_") -> str:
         str: The modified text with non-terminal dots replaced.
     """
     if not text:
-        logger.debug("Input text is empty, returning as is.")
         return text
     
-    # 替换数字序列中的点
+    # 1. 替换 数字序列 中的点号
     while re.search(r'\d+\.\d+', text): # 只要还存在 "数字.数字" 模式就继续
         text = re.sub(r'(\d+)\.(\d+)', fr'\1{replacement}\2', text)
     logger.debug(f"Replaced numeric dots: \n{text}")
@@ -52,11 +54,10 @@ def replace_non_terminal_dot(text: str, replacement: str = "_DOT_") -> str:
         
         logger.debug(f"match: {total}, abbr: {abbr}, next_char: {next_char}, replaced_abbr: {replaced_abbr}")        
         return replaced_abbr + suffix
-        
-    # abbr_pattern = r"\b(' + '|'.join(re.escape(abbr) for abbr in ABBREVIATIONS) + r')\s*(\S)?"
+
+    # 2. 替换 缩写 中的点号
     abbr_pattern = r'(' + '|'.join(re.escape(abbr) for abbr in ABBREVIATIONS) + r')(?=\s*(\S)?)'
     text = re.sub(abbr_pattern, _abbr_replacer, text)
-    # text = reg.sub(lambda m: m.group(0).replace('.', replacement), text)
     logger.debug(f"Replaced common abbreviations dots: \n{text}")
     
     return text
@@ -87,6 +88,8 @@ def segment_text_by_re(text: str) -> list:
     """
     if not text.strip():
         return [text]
+    
+    # 替换存在于 数字、缩写 中的点号，因为它们不是分句的标准
     text = replace_non_terminal_dot(text)
 
     reg_d = re.escape("".join(sorted(DELIMITERS)))
@@ -96,22 +99,21 @@ def segment_text_by_re(text: str) -> list:
     logger.debug(f"Using split pattern: {split_pattern}")
 
     raw_fragments = re.split(split_pattern, text)
-    logger.debug(f"Segmented text into {len(raw_fragments)} raw fragments: \n{raw_fragments}")
+    # logger.debug(f"Segmented text into {len(raw_fragments)} raw fragments: \n{raw_fragments}")
     
     res_fragments = []
     for fragment in raw_fragments:
         if not fragment:  # ignore empty fragment
             continue
-        fragment = restore_non_terminal_dot(fragment)
+        fragment = restore_non_terminal_dot(fragment)  # 还原先前被替换的点号
         
         is_delimiter_or_quote = len(fragment) == 1 and fragment in (DELIMITERS | DIALOG_CLOSING_PUNCTUATION)
         if is_delimiter_or_quote and res_fragments:
-            # 如果当前片段是分隔符且上一个片段已经存在，则合并当前分隔符
-            res_fragments[-1] += fragment
+            res_fragments[-1] += fragment  # 如果当前片段是分隔符且上一个片段已经存在，则合并到上一个分句
         else:
-            res_fragments.append(fragment)
+            res_fragments.append(fragment)  # 否则认为该片段是一个分句
     
-    logger.debug(f"Segmented text into {len(res_fragments)} final fragments. \n{res_fragments}")
+    # logger.debug(f"Segmented text into {len(res_fragments)} final fragments. \n{res_fragments}")
     return [f for f in res_fragments]
 
 
@@ -135,18 +137,18 @@ def is_readable(text: str) -> bool:
 if __name__ == "__main__":
     from datetime import datetime
     # Example usage
-    sample_text = "Dr. Smith#BK# went to the \nlab at 3.14 PM.\nMr. Wang said the project version is 1.2.3. Call U.S.   It's from U.S. Mr. Wang doesn't like it."
+    sample_text = "Dr. Smith#BK# went to the \nlab at 3.14 PM.\nMr. Wang said the project version is 1.2.3. Call U.S.A.   It's from U.S. Mr. Wang doesn't like it."
     text = ' "Oh! This is a test...""It\'s so hard!"他说。Another sentence! 比如 "v1.12.3" 或 "Dr. Smith"? '
     sample_text += text
 
     modified_text = replace_non_terminal_dot(sample_text)
-    print(f"original: \n{sample_text}")
-    print(f"replace dot: \n{modified_text}")  # Output: "Dr_DOT_ Smith went to the lab at 3_DOT_14 PM. The version is 1_DOT_2_DOT_3."
-    print(f"restore dot: \n{restore_non_terminal_dot(modified_text)}")  # Output: "Dr. Smith went to the lab at 3.14 PM. The version is 1.2.3."
+    logger.debug(f"original: \n{sample_text}")
+    logger.debug(f"replace dot: \n{modified_text}")  # Output: "Dr_DOT_ Smith went to the lab at 3_DOT_14 PM. The version is 1_DOT_2_DOT_3."
+    logger.debug(f"restore dot: \n{restore_non_terminal_dot(modified_text)}")  # Output: "Dr. Smith went to the lab at 3.14 PM. The version is 1.2.3."
 
-    start = datetime.now()
-    segments = segment_text_by_re(sample_text)
-    end = datetime.now()
-    print(f"\n=== Segmented {len(segments)} sentences in {end - start} seconds. ===\n")
-    for i, segment in enumerate(segments, start=1):
-        print(f"Segment {i}: {segment}")
+    # start = datetime.now()
+    # segments = segment_text_by_re(sample_text)
+    # end = datetime.now()
+    # logger.debug(f"\n=== Segmented {len(segments)} sentences in {end - start} seconds. ===\n")
+    # for i, segment in enumerate(segments, start=1):
+    #     logger.debug(f"Segment {i}: {segment}")

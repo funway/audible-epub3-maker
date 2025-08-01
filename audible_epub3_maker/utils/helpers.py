@@ -5,7 +5,7 @@ from pathlib import Path
 from rapidfuzz import fuzz
 from dataclasses import asdict
 
-from audible_epub3_maker.config import settings, AZURE_TTS_KEY, AZURE_TTS_REGION
+from audible_epub3_maker.config import settings, AZURE_TTS_KEY, AZURE_TTS_REGION, in_dev
 from audible_epub3_maker.utils import logging_setup
 from audible_epub3_maker.utils.types import WordBoundary, TagAlignment
 
@@ -29,7 +29,10 @@ def save_wbs_as_json(word_boundaries: list[WordBoundary], output_file: Path):
     pass
 
 
-def align_sentences_and_wordboundaries(sentences: list[str], word_boundaries: list[WordBoundary], threshold: float = 95.0) -> list[tuple[int, int]]:
+def align_sentences_and_wordboundaries(sentences: list[str], 
+                                       word_boundaries: list[WordBoundary], 
+                                       threshold: float = 95.0, 
+                                       dev_output_file: Path | None = None) -> list[tuple[int, int]]:
     """
     Aligns each sentence in `sentences` to a best-matching span of word boundaries using fuzzy string matching.
 
@@ -56,6 +59,7 @@ def align_sentences_and_wordboundaries(sentences: list[str], word_boundaries: li
         - Assumes sentences and word boundaries are in correct temporal/textual order.
     """
     result = [(-1, -1)] * len(sentences)
+    dev_output = []
 
     wb_texts = [normalize_text(wb.text) for wb in word_boundaries]
     wb_chars = "".join(wb_texts)
@@ -71,7 +75,8 @@ def align_sentences_and_wordboundaries(sentences: list[str], word_boundaries: li
     unmatched_sent_chars = 0
 
     for sent_idx, sent in enumerate(sentences):
-        logger.debug(f"Matching sentence [{sent_idx}]: {sent}")
+        # logger.debug(f"Matching sentence [{sent_idx}]: {sent}")
+        dev_output.append(f"Matching sentence [{sent_idx}]: {sent}")
         target_text = sent_texts[sent_idx]
         target_text_len = len(target_text)
         sent_cumulative_chars_offsets.append(sent_cumulative_chars_offsets[-1] + target_text_len)
@@ -90,7 +95,8 @@ def align_sentences_and_wordboundaries(sentences: list[str], word_boundaries: li
 
         for start in range(cur_wb_start_idx, len(wb_texts)):
             if wb_cumulative_chars_offsets[start] > max_start_pos:
-                logger.debug(f"  Start too far ahead of last matched position ({wb_texts[cur_wb_start_idx]} -> {unmatched_sent_chars + max_start_shift}). quit sliding.")
+                # logger.debug(f"  Start too far ahead of last matched position ({wb_texts[cur_wb_start_idx]} -> {unmatched_sent_chars + max_start_shift}). quit sliding.")
+                dev_output.append(f"  [{sent_idx}] Start too far ahead of last matched position ({wb_texts[cur_wb_start_idx]} -> {unmatched_sent_chars + max_start_shift}). quit sliding.")
                 break  # Start too far ahead of target sentence position
 
             buffer = ""
@@ -105,7 +111,8 @@ def align_sentences_and_wordboundaries(sentences: list[str], word_boundaries: li
                     continue
 
                 score = fuzz.ratio(buffer, target_text)
-                logger.debug(f"  [{sent_idx}] score:{score:.3f}, target:[{target_text}], wbs:[{buffer}]")
+                # logger.debug(f"  [{sent_idx}] score:{score:.3f}, target:[{target_text}], wbs:[{buffer}]")
+                dev_output.append(f"  [{sent_idx}] score:{score:.3f}, target:[{target_text}], wbs:[{buffer}]")
                 if score > best_score:
                     best_score = score
                     best_match = (start, end)
@@ -119,7 +126,7 @@ def align_sentences_and_wordboundaries(sentences: list[str], word_boundaries: li
         if best_score >= threshold:
             if not math.isclose(best_score, 100):
                 # Left-shift refinement
-                logger.debug(f"Left-shift refinement [{sent_idx}]")
+                dev_output.append(f"  [{sent_idx}] Left-shift refinement. (current best_score: {best_score:.3f})")
                 start, end = best_match
                 for new_start in range(start+1, end+1):
                     buffer = "".join(wb_texts[new_start: end+1])
@@ -127,7 +134,8 @@ def align_sentences_and_wordboundaries(sentences: list[str], word_boundaries: li
                     if buffer_len < len(target_text):
                         break
                     score = fuzz.ratio(buffer, target_text)
-                    logger.debug(f"  [{sent_idx}] Left-shifted score:{score:.3f}, target:[{target_text}], wbs:[{buffer}]")
+                    # logger.debug(f"  [{sent_idx}] Left-shifted score:{score:.3f}, target:[{target_text}], wbs:[{buffer}]")
+                    dev_output.append(f"  [{sent_idx}] Left-shifted score:{score:.3f}, target:[{target_text}], wbs:[{buffer}]")
                     if score > best_score:
                         best_score = score
                         best_match = (new_start, end)
@@ -136,16 +144,27 @@ def align_sentences_and_wordboundaries(sentences: list[str], word_boundaries: li
             
             result[sent_idx] = best_match
             cur_wb_start_idx = best_match[1] + 1
-            unmatched_sent_chars = 0  # reset
-            logger.debug(f"Alignment success for sentence: [{sent}] (best_score: {best_score:.3f}) (best_match: {''.join(wbtext for wbtext in wb_texts[best_match[0]: best_match[1]+1])})")
+            unmatched_sent_chars = 0  # reset unmatched chars
         else:
             result[sent_idx] = (-1, -1)
-            unmatched_sent_chars += target_text_len
-            logger.warning(f"Alignment faild for sentence: [{sent}] (best_score: {best_score:.3f}) (best_match: {''.join(wbtext for wbtext in wb_texts[best_match[0]: best_match[1]+1])})")
-    
+            unmatched_sent_chars += target_text_len  # increase unmatched chars
+            
+        match_status = "success" if result[sent_idx][1] >= 0 else "failed"
+        best_match_words = "".join(wb_texts[best_match[0]: best_match[1]+1])
+        dev_output.append(f"  Alignment {match_status} for sentence [{sent_idx}]: [{sent}]\n"
+                          f"  best_score: {best_score:.3f}, match: {best_match}, words: [{best_match_words}]")
+        logger.debug(dev_output[-1])
+
+        if in_dev():
+            dev_output_file = dev_output_file or Path(f"aligns_p{os.getpid()}.txt")
+            dev_output_file.write_text("\n".join(dev_output))
+
     return result
 
-def force_alignment(taged_sentences: list[tuple[str, str]], word_boundaries: list[WordBoundary], threshold: float = 95.0) -> list[TagAlignment]:
+def force_alignment(taged_sentences: list[tuple[str, str]], 
+                    word_boundaries: list[WordBoundary], 
+                    threshold: float = 95.0,
+                    dev_output_file: Path | None = None) -> list[TagAlignment]:
     """
     Generate a list of TagAlignment objects for EPUB Media Overlay (SMIL) playback.
 
@@ -161,7 +180,7 @@ def force_alignment(taged_sentences: list[tuple[str, str]], word_boundaries: lis
         threshold (float): Minimum fuzzy match score (0-100) required to accept a match. Default is 95.0.
     """
     sentences = [idx_sent[1] for idx_sent in taged_sentences]
-    raw_aligns = align_sentences_and_wordboundaries(sentences, word_boundaries, threshold)
+    raw_aligns = align_sentences_and_wordboundaries(sentences, word_boundaries, threshold, dev_output_file)
     alignments: list[TagAlignment] = []
     
     unmatched_counter = 0
@@ -211,7 +230,7 @@ def force_alignment(taged_sentences: list[tuple[str, str]], word_boundaries: lis
 
     total_counter = len(alignments)
     match_counter = total_counter - unmatched_counter
-    logger.info(
+    logger.debug(
         f"[FA] Matched alignments: {match_counter}/{total_counter} ({match_counter / total_counter:.1%}), "
         f"Interpolated alignments: {unmatched_counter}/{total_counter} ({unmatched_counter / total_counter:.1%})"
     )

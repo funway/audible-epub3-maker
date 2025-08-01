@@ -71,10 +71,9 @@ class App(object):
             # Blocks main thread of MainProcess when fetching results, 
             # waiting for the corresponding subprocess to finish.
             for result in results:
-                logger.debug(f"Main proceess got result: {result}")
                 if result[0]:
                     task_result = result[1]
-                    logger.info(f"✅ Task complete. {task_result}")
+                    logger.info(f"✅ [Task {task_result.task_id}] complete. {task_result}")
                     
                     # 0. Get the corresponding chapter item
                     chapter: EpubHTML = chapters[task_result.task_id]
@@ -105,7 +104,7 @@ class App(object):
                     chapter.attrs["media-overlay"] = smil_id
                     chapter.set_text(task_result.taged_html)
                 else:
-                    logger.error(f"❌ Task failed. {result[1]}")
+                    logger.error(f"❌ [Task {result[1].payload.task_id}] failed. {result[1]}")
             
         # Save EPUB
         epub_output_path = settings.output_dir / settings.input_file.name
