@@ -3,7 +3,7 @@ import logging
 from logging.handlers import RotatingFileHandler, QueueHandler, QueueListener
 from multiprocessing import Queue, current_process
 
-from audible_epub3_maker.config import settings
+from audible_epub3_maker.config import settings, in_dev
 from audible_epub3_maker.utils.constants import LOG_FILE, LOG_DIR, LOG_FORMAT
 
 
@@ -33,10 +33,8 @@ def setup_logging_for_main():
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, settings.log_level.upper()))
-    root_logger.handlers.clear()
 
     formatter = logging.Formatter(LOG_FORMAT)
-    
     file_handler = RotatingFileHandler(filename=LOG_FILE, 
                                        mode='a', 
                                        maxBytes=16*1024*1024,
@@ -44,14 +42,19 @@ def setup_logging_for_main():
                                        encoding='utf-8',)
     file_handler.setFormatter(formatter)
     
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
+    handlers = [file_handler]
+    
+    if in_dev():
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        handlers.append(console_handler)
 
     if _log_queue is None:
         _log_queue = Queue()
-    _log_listener = QueueListener(_log_queue, file_handler, console_handler)
+    _log_listener = QueueListener(_log_queue, *handlers)
     _log_listener.start()
     
+    root_logger.handlers.clear()
     root_logger.addHandler(QueueHandler(_log_queue))
 
     atexit.register(stop_logging)  # Register automatic shutdown hook
@@ -66,7 +69,11 @@ def setup_logging_for_worker(shared_log_queue: Queue):
     Args:
         shared_log_queue (Queue): The multiprocessing queue from the main process.
     """
+    if _is_main_process():
+        raise RuntimeError("Function `setup_logging_for_worker` should not be called in main process.")
+    
     root_logger = logging.getLogger()
+    root_logger.handlers.clear()
     root_logger.addHandler(QueueHandler(shared_log_queue))
     pass
 

@@ -23,10 +23,11 @@ class App(object):
     
     def run(self):
         helpers.validate_settings()
-        logger.debug(f"⚙️ Settings: {settings.to_dict()}")
+        logger.info(f"⚙️ Settings: {settings.to_dict()}")
         
         book = EpubBook(settings.input_file)
         logger.info(f"📕 EPUB Book Info: title = [{book.title}], identifier = [{book.identifier}], language = [{book.language}]")
+        print(f"📕 EPUB Book Info: title = [{book.title}], identifier = [{book.identifier}], language = [{book.language}]")
 
         if book.language != settings.tts_lang:
             msg = (
@@ -57,7 +58,7 @@ class App(object):
             pass
         
         # Dispatch tasks and wait for completion
-        logger.info(f"🚀 Start processing {settings.input_file} ...")
+        print(f"🚀 Start processing {settings.input_file} ...")
         start_time = time.perf_counter()
         with ProcessPoolExecutor(max_workers=min(settings.max_workers, len(chapters)),
                                  initializer=init_worker,
@@ -112,4 +113,5 @@ class App(object):
 
         elapsed = time.perf_counter() - start_time
         logger.info(f"🎉 Processing complete. EPUB saved to {epub_output_path} (finished in {helpers.format_seconds(elapsed)})")
+        print(f"🎉 Processing complete. EPUB saved to {epub_output_path} (finished in {helpers.format_seconds(elapsed)})")
         pass

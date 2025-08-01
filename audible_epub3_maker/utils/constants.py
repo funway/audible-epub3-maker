@@ -12,6 +12,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 LOG_DIR = BASE_DIR / "logs"
 LOG_FILE = LOG_DIR / "app.log"
 LOG_FORMAT = "%(asctime)s %(levelname)s [p%(process)d,t%(thread)d] %(name)s.%(funcName)s - %(message)s"
+LOG_FORMAT_SIMPLE = "[p%(process)d] %(levelname)s: %(message)s"
 
 # HTML segmentation config
 BEAUTIFULSOUP_PARSER = "lxml-xml"
