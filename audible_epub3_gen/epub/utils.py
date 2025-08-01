@@ -23,6 +23,7 @@ def init_epub_mimetypes():
     _EPUB_MIMETYPES_INITIALIZED = True
     return
 
+
 def guess_media_type(file_path: str) -> str:
     init_epub_mimetypes()
 
@@ -32,12 +33,25 @@ def guess_media_type(file_path: str) -> str:
         
     return media_type
 
+
 def parse_xml(data: bytes | str, recover: bool = True, resolve_entities: bool = False) -> ET._Element:
+    """
+    Parse XML or HTML content into an lxml Element.
+
+    Args:
+        data (bytes | str): XML or HTML content as bytes or UTF-8 string.
+        recover (bool): Enable recovery mode for malformed markup. Defaults to True.
+        resolve_entities (bool): Whether to resolve external entities. Defaults to False.
+
+    Returns:
+        ET._Element: Parsed root element.
+    """
     if isinstance(data, str):
         data = data.encode("utf-8")
 
     parser = ET.XMLParser(recover=recover, resolve_entities=resolve_entities)
     return ET.fromstring(data, parser=parser) 
+
 
 def list_files_in_zip(zf: zipfile.ZipFile, prefix: str = "") -> set[str]:
     return {

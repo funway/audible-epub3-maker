@@ -20,8 +20,12 @@ class UserSettings:
         self.tts_engine: str = "azure"
         self.tts_lang: str = "en-US"
         self.tts_voice: str = "en-US-AvaMultilingualNeural"
+        self.tts_chunk_len: int = -1  # Max chars length per chunk for a TTS request.
 
-        # confirmation prompt
+        # Force alignment similarity threshold
+        self.fa_threshold: float = 95.0
+
+        # Confirmation prompt
         self.force: bool = False  # Force all prompts to be accepted (non-interactive mode)
 
         # Multi-process (workers)

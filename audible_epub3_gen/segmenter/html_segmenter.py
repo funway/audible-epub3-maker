@@ -16,7 +16,7 @@ def get_hierarchy_name(tag: Tag) -> str:
         tag = tag.parent
     return " > ".join(reversed(hierarchy))
 
-def wrap_text_in_tag(soup: BeautifulSoup, text: str, wrapping_tag: str = "span", attrs: dict | None = None) -> Tag:
+def _bs_wrap_text_in_tag(soup: BeautifulSoup, text: str, wrapping_tag: str = "span", attrs: dict | None = None) -> Tag:
     """Wraps the given text in a new tag with specified attributes.
 
     Args:
@@ -33,7 +33,7 @@ def wrap_text_in_tag(soup: BeautifulSoup, text: str, wrapping_tag: str = "span",
     tag.string = text
     return tag
 
-def _segment_node(soup: BeautifulSoup, node: Tag, wrapping_tag: str = "span", wrapping_tag_attrs: dict | None = None) -> None:
+def _bs_segment_node(soup: BeautifulSoup, node: Tag, wrapping_tag: str = "span", wrapping_tag_attrs: dict | None = None) -> None:
     """
     Recursively processes an HTML node, segmenting its text content into readable fragments and wrapping each fragment in a new tag.
     For each child node:
@@ -57,7 +57,7 @@ def _segment_node(soup: BeautifulSoup, node: Tag, wrapping_tag: str = "span", wr
                 for fragment in fragments:
                     if is_readable(fragment):
                         # append as a new tag
-                        new_tag = wrap_text_in_tag(soup, fragment, wrapping_tag, wrapping_tag_attrs)
+                        new_tag = _bs_wrap_text_in_tag(soup, fragment, wrapping_tag, wrapping_tag_attrs)
                         new_contents.append(new_tag)
                     else:
                         # append as NavigableString
@@ -67,7 +67,7 @@ def _segment_node(soup: BeautifulSoup, node: Tag, wrapping_tag: str = "span", wr
                 new_contents.append(child)  # 保留空白的 NavigableString
         elif isinstance(child, Tag):
             logger.debug(f"  Handle Tag: {get_hierarchy_name(child)}")
-            _segment_node(soup, child, wrapping_tag, wrapping_tag_attrs)
+            _bs_segment_node(soup, child, wrapping_tag, wrapping_tag_attrs)
             new_contents.append(child)  # don't forget processed child
         else:
             logger.debug(f"  Keep unknown type child: {type(child)}")
@@ -83,7 +83,7 @@ def _segment_node(soup: BeautifulSoup, node: Tag, wrapping_tag: str = "span", wr
     
     return
 
-def _append_suffix_inside(tag: Tag, suffix: str):
+def _bs_append_suffix_inside(tag: Tag, suffix: str):
     # append suffix to the last no-empty NavigableString child of the tag
     for elem in reversed(tag.find_all(string=True)):
         if elem.strip():
@@ -102,7 +102,7 @@ def append_suffix_to_tags(html_text: str, suffix_map: dict[str, str], inside: bo
                 continue
             
             if inside:
-                _append_suffix_inside(tag, suffix)
+                _bs_append_suffix_inside(tag, suffix)
             else:
                 tag.insert_after(suffix)
     return str(soup)
@@ -164,7 +164,7 @@ def html_segment_and_wrap(html_text: str, wrapping_tag: str = "span") -> str:
     if not root.contents:
         logger.warning(f"No content found in html text【{html_text[:10]}{' ...' if len(html_text) > 10 else ''}】")        
     
-    _segment_node(soup, root, wrapping_tag, {f"{SEG_MARK_ATTR}":"1"})
+    _bs_segment_node(soup, root, wrapping_tag, {f"{SEG_MARK_ATTR}":"1"})
 
     counter = 1
     new_elems = soup.select(f"{wrapping_tag}[{SEG_MARK_ATTR}]")

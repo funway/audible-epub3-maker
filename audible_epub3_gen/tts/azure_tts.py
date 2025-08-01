@@ -7,8 +7,8 @@ import azure.cognitiveservices.speech as speechsdk
 
 from audible_epub3_gen.utils import logging_setup
 from audible_epub3_gen.utils import helpers
-from audible_epub3_gen.utils.types import WordBoundary, TagAlignment
-from audible_epub3_gen.utils.constants import BEAUTIFULSOUP_PARSER, SEG_MARK_ATTR
+from audible_epub3_gen.utils.types import WordBoundary, TTSEmptyAudioError, TTSEmptyContentError
+from audible_epub3_gen.utils.constants import BEAUTIFULSOUP_PARSER, SEG_MARK_ATTR, SEG_TAG
 from audible_epub3_gen.config import AZURE_TTS_KEY, AZURE_TTS_REGION, settings
 from audible_epub3_gen.tts.base_tts import BaseTTS
 from audible_epub3_gen.segmenter import html_segmenter, text_segmenter
@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 class AzureTTS(BaseTTS):
     """docstring for AzureTTS."""
   
-    # max_bytes_per_request = 10_000  # Azure TTS has a limit of 10_000 bytes per request
-    max_bytes_per_request = 200  # Azure TTS has a limit of 10_000 bytes per request
+    max_bytes_per_request = 10_000  # Azure TTS has a limit of 10_000 bytes per request
+    # max_bytes_per_request = 1000  # Azure TTS has a limit of 10_000 bytes per request
 
     def __init__(self):
         super(AzureTTS, self).__init__()
@@ -35,6 +35,18 @@ class AzureTTS(BaseTTS):
         A leading newline is added to improve word boundary detection between words surrounding a break.
         """
         return f'\n<break time="{break_time_ms}ms" />'
+
+    @staticmethod
+    def max_chars_per_chunk() -> int:
+        default = 3000
+        lang = settings.tts_lang.lower()
+        if lang.startswith(("zh", "ja", "ko")):
+            default = 2000
+        
+        if settings.tts_chunk_len <= 0:
+            return default
+        else:
+            return settings.tts_chunk_len
 
     def word_boundary_cb(self, evt, word_boundaries: list):
         """
@@ -81,22 +93,21 @@ class AzureTTS(BaseTTS):
             "p" : "_#BRK1#",
         }
         html_with_break_mark = html_segmenter.append_suffix_to_tags(html_text, suffix_map=break_map)
-        logger.debug(f"Breaked HTML: \n{html_with_break_mark}")
+        logger.debug(f"HTML with BREAK mark: \n{html_with_break_mark}")
         
         soup = BeautifulSoup(html_with_break_mark, BEAUTIFULSOUP_PARSER)
         body_text = soup.body.get_text() if soup.body else soup.get_text()
-        sentences_with_inline_break = text_segmenter.segment_text_by_re(body_text)
-        logger.debug(f"Sentences with inline break mark: \n{sentences_with_inline_break}")
+        sentences_with_inline_break_mark = text_segmenter.segment_text_by_re(body_text)
+        logger.debug(f"Sentences with inline break mark: \n{sentences_with_inline_break_mark}")
         
         sentences_and_ssml_breaks = []
         break_pattern = re.compile(r"(_#BRK\d#)")
-        for sentence_with_break in sentences_with_inline_break:
+        for sentence_with_break in sentences_with_inline_break_mark:
             segs = break_pattern.split(sentence_with_break)
-            logger.debug(f"Segmented sentence splited by break marker: {segs}")
             for idx, seg in enumerate(segs):
                 if idx % 2 == 1:  # odd index is break
                     n = int(seg[5]) if seg.startswith("_#BRK") else 1
-                    sentences_and_ssml_breaks.append(self.get_break_ssml(n * 500))
+                    sentences_and_ssml_breaks.append(AzureTTS.get_break_ssml(n * 500))
                 else:  # even index is text
                     sentences_and_ssml_breaks.append(html.escape(seg))  # escape HTML entities
         logger.debug(f"Sentences (and ssml breaks): {sentences_and_ssml_breaks}")
@@ -105,13 +116,15 @@ class AzureTTS(BaseTTS):
         text_chunks = []
         current_chunk = ""
         for segment in sentences_and_ssml_breaks:
-            if len(current_chunk.encode('utf-8')) + len(segment.encode('utf-8')) > self.max_bytes_per_request:
+            # if len(current_chunk.encode('utf-8')) + len(segment.encode('utf-8')) > self.max_bytes_per_request:
+            if len(current_chunk) + len(segment) > AzureTTS.max_chars_per_chunk():
                 text_chunks.append(current_chunk)
                 current_chunk = segment
             else:
                 current_chunk += segment
-        if current_chunk:
+        if current_chunk.strip():  # skip empty chunk
             text_chunks.append(current_chunk)
+        
         logger.debug(f"Text chunks [{len(text_chunks)}]: {text_chunks}")
         return text_chunks
 
@@ -139,7 +152,8 @@ class AzureTTS(BaseTTS):
         else:
             logger.error(f"Speech synthesis failed: {result.reason}")
             logger.error(f"  Error details: {result.cancellation_details.error_details if result.cancellation_details else 'No error details'}")
-            logger.error(f"  Error SSML: {ssml}")
+            logger.debug(f"  Error SSML: {ssml}")
+
             raise RuntimeError(f"Speech synthesis failed for reason: {result.reason}. {result.cancellation_details.error_details}")
         
         return result.audio_data, word_boundaries
@@ -194,6 +208,21 @@ class AzureTTS(BaseTTS):
 
     def html_to_speech(self, html_text: str, output_file: Path, metadata: dict|None = None) -> list[WordBoundary]:
         """
+        Converts an HTML string into a speech audio file and returns word-level alignment information.
+
+        This method performs the following steps:
+        1. Parses and segments the input HTML into readable text chunks.
+        2. Synthesizes each chunk using TTS and collects word boundary metadata.
+        3. Merges all audio chunks and boundary data into a single output.
+        4. Saves the merged audio to the specified output path with optional metadata.
+
+        Args:
+            html_text (str): HTML content to be synthesized into speech.
+            output_file (Path): Path to save the final merged audio file (e.g., output.wav).
+            metadata (dict | None): Optional metadata for the audio file (e.g., title, language, voice).
+
+        Returns:
+            list[WordBoundary]: A list of word boundary objects representing the alignment information.
         """
         output_file = Path(output_file)
         metadata = metadata or {}
@@ -202,6 +231,8 @@ class AzureTTS(BaseTTS):
         
         # 1. split
         text_chunks = self._break_html_into_text_chunks(html_text)
+        if not text_chunks:
+            raise TTSEmptyContentError("Input HTML contains no valid text content.")
 
         # 2. tts
         chunks = []
@@ -218,12 +249,16 @@ class AzureTTS(BaseTTS):
 
         # 3. merge audio and word boundaries
         merged_audio, merged_wbs = self._merge_audio_chunks_and_word_boundaries(chunks)
-        wbs_file = output_file.with_name(output_file.stem + ".wbs")
-        helpers.save_wbs_as_json(merged_wbs, wbs_file)
-
+        if merged_audio is None or len(merged_audio) == 0:
+            raise TTSEmptyAudioError("TTS returned empty or invalid audio data.")
+        
         # 4. save merged audio
         self._save_audio(merged_audio, output_file, metadata)
         
+        # 5. clear chunks tmp file
+        for chunk in chunks:
+            chunk["audio_file"].unlink(missing_ok=True)
+
         return merged_wbs
   
 
@@ -234,14 +269,10 @@ def main():
         xmlns:mstts="http://www.w3.org/2001/mstts"
         xml:lang="en-US">
     <voice name="en-us-avaMultilingualNeural">
-        <mstts:express-as style="narration">
-        <prosody rate="0%">
-            <mark name="ae001"/> Hello,World! It's 2025! 哈哈！Let<mark name="ae998"/>'s see what happens<mark name="ae001_end"/>.
-            <mark name="ae002"/> All animals are equal, 
-            <break time="500ms"/><break time="300ms"/>
-            <mark name="ae003"/> but some animals are more equal than others\n<break time="10ms"/>Oh,这里还可以出现中文吗？
-        </prosody>
-        </mstts:express-as>
+        It made the boy sad to see the old man come in each
+day with his skiff empty and he always went down to help him carry
+either the coiled lines or the gaff and harpoon and the sail that was
+furled around the mast.  The sail was patched with flour sacks and,
     </voice>
     </speak>
     """
@@ -342,39 +373,68 @@ def test():
 </html>
     '''
 
+#     html = '''
+# <html xmlns="http://www.w3.org/1999/xhtml">
+# <head><meta content="application/xhtml+xml; charset=utf-8" http-equiv="Content-Type"/>
+# <link href="page-template.xpgt" rel="stylesheet" type="application/vnd.adobe-page-template+xml"/>
+# <title>Harry Potter and the Prisoner of Azkaban - Chapter 3</title>
+# <link href="flow0001.css" rel="stylesheet" type="text/css"/>
+# </head>
+# <body style="font-family:serif;"><div/>
+# <p class="pagebreak EPubfirstparagraph Epubpagerstart" id="hp3_ch3"> </p>
+# <p> </p>
+# <h4><span data-ae-x="1" id="ae00001">– CHAPTER THREE –</span></h4>
+# <p> </p>
+# <h1 class="chaptitle"><span data-ae-x="1" id="ae00002">The Knight Bus</span></h1>
+# <p class="first"><span data-ae-x="1" id="ae00003">Harry was several streets away before he collapsed onto a low wall in Magnolia Crescent,</span><span data-ae-x="1" id="ae00004"> panting from the effort of dragging his trunk.</span><span data-ae-x="1" id="ae00005"> He sat quite still,</span><span data-ae-x="1" id="ae00006"> anger still surging through him,</span><span data-ae-x="1" id="ae00007"> listening to the frantic thumping of his heart.</span></p>
+# <p><span data-ae-x="1" id="ae00008">But after ten minutes alone in the dark street,</span><span data-ae-x="1" id="ae00009"> a new emotion overtook him: panic.</span><span data-ae-x="1" id="ae00010"> Whichever way he looked at it,</span><span data-ae-x="1" id="ae00011"> he had never been in a worse fix.</span><span data-ae-x="1" id="ae00012"> He was stranded,</span><span data-ae-x="1" id="ae00013"> quite alone,</span><span data-ae-x="1" id="ae00014"> in the dark Muggle world,</span><span data-ae-x="1" id="ae00015"> with absolutely nowhere to go.</span><span data-ae-x="1" id="ae00016"> And the worst of it was,</span><span data-ae-x="1" id="ae00017"> he had just done serious magic,</span><span data-ae-x="1" id="ae00018"> which meant that he was almost certainly expelled from Hogwarts.</span><span data-ae-x="1" id="ae00019"> He had broken the Decree for the Restriction of Underage Wizardry so badly,</span><span data-ae-x="1" id="ae00020"> he was surprised Ministry of Magic representatives weren’t swooping down on him where he sat.</span></p>
+# <p><span data-ae-x="1" id="ae00021">Harry shivered and looked up and down Magnolia Crescent.</span><span data-ae-x="1" id="ae00022"> What was going to happen to him?</span><span data-ae-x="1" id="ae00023"> Would he be arrested,</span><span data-ae-x="1" id="ae00024"> or would he simply be outlawed from the wizarding world?</span><span data-ae-x="1" id="ae00025"> He thought of Ron and Hermione,</span><span data-ae-x="1" id="ae00026"> and his heart sank even lower.</span><span data-ae-x="1" id="ae00027"> Harry was sure that,</span><span data-ae-x="1" id="ae00028"> criminal or not,</span><span data-ae-x="1" id="ae00029"> Ron and Hermione would want to help him now,</span><span data-ae-x="1" id="ae00030"> but they were both abroad,</span><span data-ae-x="1" id="ae00031"> and with Hedwig gone,</span><span data-ae-x="1" id="ae00032"> he had no means of contacting them.</span></p>
+# <p><span data-ae-x="1" id="ae00033">He didn’t have any Muggle money,</span><span data-ae-x="1" id="ae00034"> either.</span><span data-ae-x="1" id="ae00035"> There was a little wizard gold in the moneybag at the bottom of his trunk,</span><span data-ae-x="1" id="ae00036"> but the rest of the fortune his parents had left him was stored in a vault at Gringotts Wizarding Bank in London.</span><span data-ae-x="1" id="ae00037"> He’d never be able to drag his trunk all the way to London.</span><span data-ae-x="1" id="ae00038"> Unless …</span></p>
+# <p><span data-ae-x="1" id="ae00039">He looked down at his wand,</span><span data-ae-x="1" id="ae00040"> which he was still clutching in his hand.</span><span data-ae-x="1" id="ae00041"> If he was already expelled (his heart was now thumping painfully fast),</span><span data-ae-x="1" id="ae00042"> a bit more magic couldn’t hurt.</span><span data-ae-x="1" id="ae00043"> He had the Invisibility Cloak he had inherited from his father – what if he bewitched the trunk to make it feather-light,</span><span data-ae-x="1" id="ae00044"> tied it to his broomstick,</span><span data-ae-x="1" id="ae00045"> covered himself in the Cloak and flew to London?</span><span data-ae-x="1" id="ae00046"> Then he could get the rest of his money out of his vault and … begin his life as an outcast.</span><span data-ae-x="1" id="ae00047"> It was a horrible prospect,</span><span data-ae-x="1" id="ae00048"> but he couldn’t sit on this wall for ever or he’d find himself trying to explain to Muggle police why he was out in the dead of night with a trunkful of spellbooks and a broomstick.</span></p>
+# <p><span data-ae-x="1" id="ae00049">Harry opened his trunk again and pushed the contents aside,</span><span data-ae-x="1" id="ae00050"> looking for the Invisibility Cloak – but before he had found it,</span><span data-ae-x="1" id="ae00051"> he straightened up suddenly,</span><span data-ae-x="1" id="ae00052"> looking around him once more.</span></p>
+# <p><span data-ae-x="1" id="ae00053">A funny prickling on the back of his neck had made Harry feel he was being watched,</span><span data-ae-x="1" id="ae00054"> but the street appeared to be deserted,</span><span data-ae-x="1" id="ae00055"> and no lights shone from any of the large square houses.</span></p>
+# </body></html>
+# '''
     html = '''
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head><meta content="application/xhtml+xml; charset=utf-8" http-equiv="Content-Type"/>
-<link href="page-template.xpgt" rel="stylesheet" type="application/vnd.adobe-page-template+xml"/>
-<title>Harry Potter and the Prisoner of Azkaban - Chapter 3</title>
-<link href="flow0001.css" rel="stylesheet" type="text/css"/>
-</head>
-<body style="font-family:serif;"><div/>
-<p class="pagebreak EPubfirstparagraph Epubpagerstart" id="hp3_ch3"> </p>
-<p> </p>
-<h4><span data-ae-x="1" id="ae00001">– CHAPTER THREE –</span></h4>
-<p> </p>
-<h1 class="chaptitle"><span data-ae-x="1" id="ae00002">The Knight Bus</span></h1>
-<p class="first"><span data-ae-x="1" id="ae00003">Harry was several streets away before he collapsed onto a low wall in Magnolia Crescent,</span><span data-ae-x="1" id="ae00004"> panting from the effort of dragging his trunk.</span><span data-ae-x="1" id="ae00005"> He sat quite still,</span><span data-ae-x="1" id="ae00006"> anger still surging through him,</span><span data-ae-x="1" id="ae00007"> listening to the frantic thumping of his heart.</span></p>
-<p><span data-ae-x="1" id="ae00008">But after ten minutes alone in the dark street,</span><span data-ae-x="1" id="ae00009"> a new emotion overtook him: panic.</span><span data-ae-x="1" id="ae00010"> Whichever way he looked at it,</span><span data-ae-x="1" id="ae00011"> he had never been in a worse fix.</span><span data-ae-x="1" id="ae00012"> He was stranded,</span><span data-ae-x="1" id="ae00013"> quite alone,</span><span data-ae-x="1" id="ae00014"> in the dark Muggle world,</span><span data-ae-x="1" id="ae00015"> with absolutely nowhere to go.</span><span data-ae-x="1" id="ae00016"> And the worst of it was,</span><span data-ae-x="1" id="ae00017"> he had just done serious magic,</span><span data-ae-x="1" id="ae00018"> which meant that he was almost certainly expelled from Hogwarts.</span><span data-ae-x="1" id="ae00019"> He had broken the Decree for the Restriction of Underage Wizardry so badly,</span><span data-ae-x="1" id="ae00020"> he was surprised Ministry of Magic representatives weren’t swooping down on him where he sat.</span></p>
-<p><span data-ae-x="1" id="ae00021">Harry shivered and looked up and down Magnolia Crescent.</span><span data-ae-x="1" id="ae00022"> What was going to happen to him?</span><span data-ae-x="1" id="ae00023"> Would he be arrested,</span><span data-ae-x="1" id="ae00024"> or would he simply be outlawed from the wizarding world?</span><span data-ae-x="1" id="ae00025"> He thought of Ron and Hermione,</span><span data-ae-x="1" id="ae00026"> and his heart sank even lower.</span><span data-ae-x="1" id="ae00027"> Harry was sure that,</span><span data-ae-x="1" id="ae00028"> criminal or not,</span><span data-ae-x="1" id="ae00029"> Ron and Hermione would want to help him now,</span><span data-ae-x="1" id="ae00030"> but they were both abroad,</span><span data-ae-x="1" id="ae00031"> and with Hedwig gone,</span><span data-ae-x="1" id="ae00032"> he had no means of contacting them.</span></p>
-<p><span data-ae-x="1" id="ae00033">He didn’t have any Muggle money,</span><span data-ae-x="1" id="ae00034"> either.</span><span data-ae-x="1" id="ae00035"> There was a little wizard gold in the moneybag at the bottom of his trunk,</span><span data-ae-x="1" id="ae00036"> but the rest of the fortune his parents had left him was stored in a vault at Gringotts Wizarding Bank in London.</span><span data-ae-x="1" id="ae00037"> He’d never be able to drag his trunk all the way to London.</span><span data-ae-x="1" id="ae00038"> Unless …</span></p>
-<p><span data-ae-x="1" id="ae00039">He looked down at his wand,</span><span data-ae-x="1" id="ae00040"> which he was still clutching in his hand.</span><span data-ae-x="1" id="ae00041"> If he was already expelled (his heart was now thumping painfully fast),</span><span data-ae-x="1" id="ae00042"> a bit more magic couldn’t hurt.</span><span data-ae-x="1" id="ae00043"> He had the Invisibility Cloak he had inherited from his father – what if he bewitched the trunk to make it feather-light,</span><span data-ae-x="1" id="ae00044"> tied it to his broomstick,</span><span data-ae-x="1" id="ae00045"> covered himself in the Cloak and flew to London?</span><span data-ae-x="1" id="ae00046"> Then he could get the rest of his money out of his vault and … begin his life as an outcast.</span><span data-ae-x="1" id="ae00047"> It was a horrible prospect,</span><span data-ae-x="1" id="ae00048"> but he couldn’t sit on this wall for ever or he’d find himself trying to explain to Muggle police why he was out in the dead of night with a trunkful of spellbooks and a broomstick.</span></p>
-<p><span data-ae-x="1" id="ae00049">Harry opened his trunk again and pushed the contents aside,</span><span data-ae-x="1" id="ae00050"> looking for the Invisibility Cloak – but before he had found it,</span><span data-ae-x="1" id="ae00051"> he straightened up suddenly,</span><span data-ae-x="1" id="ae00052"> looking around him once more.</span></p>
-<p><span data-ae-x="1" id="ae00053">A funny prickling on the back of his neck had made Harry feel he was being watched,</span><span data-ae-x="1" id="ae00054"> but the street appeared to be deserted,</span><span data-ae-x="1" id="ae00055"> and no lights shone from any of the large square houses.</span></p>
-</body></html>
+<?xml version='1.0' encoding='utf-8'?>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+        <meta name="calibre:cover" content="true"/>
+        <title>Cover</title>
+        <style type="text/css" title="override_css">
+            @page {padding: 0pt; margin:0pt}
+            body { text-align: center; padding:0pt; margin: 0pt; }
+        </style>
+    </head>
+    <body>
+        <div>
+            <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="100%" height="100%" viewBox="0 0 250 402" preserveAspectRatio="none">
+                <p><image width="250" height="402" xlink:href="cover.jpeg"/></p>
+            </svg>
+        </div>
+    </body>
+</html>
+
 '''
 
     tts = AzureTTS()
+
     wb_list = tts.html_to_speech(html, "output.mp3", metadata={})
     #   logger.debug(f"wb_list: {wb_list}")
     #   aligns = force_alignment(html, "span", wb_list)
+    
+    wbs_file = "outpu.wbs"
+    helpers.save_wbs_as_json(wb_list, wbs_file)
+
     soup = BeautifulSoup(html, BEAUTIFULSOUP_PARSER)
-    segment_elems = soup.select(f"span[{SEG_MARK_ATTR}]")
-    segments = [ tag.get_text() for tag in segment_elems]
-    logger.debug(f"segments: {segments}")
-    alignments = helpers.force_alignment(segments, wb_list)
-    logger.debug(alignments)
+    segment_elems = soup.select(f"{SEG_TAG}[{SEG_MARK_ATTR}]")
+    # segments = [ tag.get_text() for tag in segment_elems]
+    idx_segments = [(tag.get("id"), tag.get_text()) for tag in segment_elems]
+    logger.debug(f"segments: {idx_segments}")
+    alignments = helpers.force_alignment(idx_segments, wb_list)
+    # logger.debug(alignments)
+    print(helpers.generate_smil("text/01.smil", "text/ch01.xhtml", "audio/aud_01.mp3", alignments))
     pass
 
 

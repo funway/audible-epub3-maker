@@ -9,6 +9,7 @@ from audible_epub3_gen.utils.constants import LOG_FILE, LOG_DIR, LOG_FORMAT
 
 _log_queue = None
 _log_listener = None
+_initialized = False
 
 def _is_main_process() -> bool:
     return current_process().name == "MainProcess"
@@ -23,13 +24,12 @@ def setup_logging_for_main():
     - Adds both file and console handlers.
     - Creates a log queue and attaches a QueueListener.
     """
-    global _log_queue 
-    global _log_listener
+    global _log_queue, _log_listener, _initialized
 
-    if not _is_main_process():
-        # Skip for subprocesses
+    if not _is_main_process() or _initialized:
+        # Skip for subprocesses, or already initialized in MainProcess
         return
-    
+
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, settings.log_level, logging.INFO))
@@ -54,8 +54,8 @@ def setup_logging_for_main():
     
     root_logger.addHandler(QueueHandler(_log_queue))
 
-    # Register automatic shutdown hook
-    atexit.register(stop_logging)
+    atexit.register(stop_logging)  # Register automatic shutdown hook
+    _initialized = True
     pass
 
 

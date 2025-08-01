@@ -62,6 +62,13 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--tts_chunk_len",
+        type = int,
+        default = 0,
+        help = "Maximum number of characters per TTS chunk (default: auto by language)"
+    )
+
+    parser.add_argument(
         "-f", "--force",
         action="store_true",
         default=False,

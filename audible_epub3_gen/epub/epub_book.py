@@ -22,6 +22,12 @@ NAMESPACES = {
     'dc': 'http://purl.org/dc/elements/1.1/',
 }
 
+
+class EpubError(Exception): pass
+class EpubStructureError(EpubError): pass
+class EpubContentError(EpubError): pass
+class EpubIOError(EpubError): pass
+
 @dataclass
 class LazyLoad:
     def load(self) -> bytes:
@@ -146,14 +152,40 @@ class EpubTextItem(EpubItem):
             return len(re.sub(r"\s+", "", self.get_text()))
 
 class EpubNcx(EpubTextItem): pass
-class EpubHTML(EpubTextItem): pass
+
+class EpubHTML(EpubTextItem):
+
+    def get_title(self) -> str:
+        """
+        [Uncompleted] Extracts a title from the XHTML content, prioritizing in order: <title>, <h1>, <h2>, <h3>.
+
+        Returns:
+            str: The first non-empty text found in those tags, or empty string if none found.
+        """
+        # TODO: 从 html 中找章节标题其实不是一个好办法，好办法是从 toc.ncx 或者 nav 中找，然后 set title 给他
+        raise NotImplementedError
+    
+        title_levels = ['h1', 'h2', 'h3']
+
+        try:
+            tree = parse_xml(self.get_text())
+        except Exception as e:
+            logger.warning(f"Failed to parse XHTML for {self.href}: {e}")
+            return ""
+        
+        for level in title_levels:
+            elems = tree.xpath(f"//*[local-name()='{level}']")
+            for elem in elems:
+                text = (elem.text or "").strip()
+                if text:
+                    return text
+        return ""
+
 class EpubNavHTML(EpubHTML): pass
 
 class EpubSMIL(EpubTextItem): pass
 class EpubAudio(EpubItem): pass
 class EpubImage(EpubItem): pass
-
-class EpubException(Exception): pass
 
 class EpubBook:
     """
@@ -207,7 +239,7 @@ class EpubBook:
         https://www.w3.org/TR/epub-33/#sec-pkg-metadata
         """
         if self.opf_root is None:
-            raise EpubException("OPF root is not loaded. Cannot access metadata.")
+            raise EpubStructureError("OPF root is not loaded. Cannot access metadata.")
         
         return self.opf_root.find(".//opf:metadata", namespaces=NAMESPACES)
 
@@ -228,7 +260,7 @@ class EpubBook:
         https://www.w3.org/TR/epub-33/#sec-pkg-spine
         """
         if self.opf_root is None:
-            raise EpubException("OPF root is not loaded. Cannot access spine.")
+            raise EpubStructureError("OPF root is not loaded. Cannot access spine.")
         
         return self.opf_root.find(".//opf:spine", namespaces=NAMESPACES)
     
@@ -246,14 +278,14 @@ class EpubBook:
     def _read_required_metadata(self):
         metadata = self.metadata
         if metadata is None:
-            raise EpubException("No <metadata> found in opf")
+            raise EpubStructureError("No <metadata> found in opf")
         
         try:
             self.identifier = metadata.find("dc:identifier", namespaces=NAMESPACES).text.strip()
             self.title = metadata.find("dc:title", namespaces=NAMESPACES).text.strip()
             self.language = metadata.find("dc:language", namespaces=NAMESPACES).text.strip()
         except Exception as e:
-            raise EpubException("Missing required metadata: dc:identifier, dc:title, or dc:language") from e
+            raise EpubContentError("Missing required metadata: dc:identifier, dc:title, or dc:language") from e
         pass
 
     def _read_epub(self, epub_path):
@@ -263,13 +295,13 @@ class EpubBook:
             # 1. read mimetype file
             mimetype = zf.read("mimetype").decode("ascii").strip()
             if mimetype != MIMETYPE:
-                raise EpubException(f"Invalid mimetype: {mimetype}")
+                raise EpubContentError(f"Invalid mimetype: {mimetype}")
 
             # 2. read container.xml
             self.container_root = parse_xml(zf.read(CONTAINER_PATH))
             rootfile = self.container_root.find(".//{*}rootfile")
             if rootfile is None:
-                raise EpubException("No <rootfile> found in container.xml")
+                raise EpubStructureError("No <rootfile> found in container.xml")
             
             self.opf_path = rootfile.attrib["full-path"]
             logger.debug(f"Found .opf file: {self.opf_path}")
@@ -286,7 +318,7 @@ class EpubBook:
             # 3.2 manifest
             manifest_elem = self.opf_root.find(".//opf:manifest", namespaces=NAMESPACES)
             if manifest_elem is None:
-                raise EpubException("No <manifest> found in opf")
+                raise EpubStructureError("No <manifest> found in opf")
             manifest_items = {}
             for item_elem in manifest_elem:
                 href = item_elem.attrib["href"]
@@ -344,7 +376,7 @@ class EpubBook:
             # 3.3 spine
             # use self.spine property
             if self.spine is None:
-                raise EpubException("No <spine> found in opf")
+                raise EpubStructureError("No <spine> found in opf")
             
             pass
         pass
@@ -370,8 +402,6 @@ class EpubBook:
         Returns:
             list[EpubHTML]: Ordered list of main content items in reading sequence
         """
-        logger.debug(f"Getting chapters from {self.epub_path.name}")
-        
         spine_elem = self.spine
         itemrefs = spine_elem.findall("opf:itemref", namespaces=NAMESPACES)
         
@@ -388,12 +418,15 @@ class EpubBook:
             if not isinstance(item, EpubNavHTML):
                 chapters.append(item)
 
+        logger.debug(f"Found {len(chapters)} linear reading items from {self.epub_path.name}")
         return chapters
     
-    def save_epub(self, output_path):
-        # TODO: 将原文件作为 backup 一起保存在新的 epub 中，并在 item 属性中加上本项目的版本号，或者日期
+    def save_epub(self, output_path: Path, extra_meta: dict | None = None):
+        # TODO: 
+        # 1. 如果 output_path 与原文件 self.epub_path 冲突了，在移动临时文件之前，将原文件 mv 成 .epub.bak 的形式
+        # 2. 添加 extra_meta 给 epub。我想增加一个元数据表示 generated by APP_FULL_NAME
 
-        tmp_path = Path(output_path).with_suffix(".tmp.epub")
+        tmp_path = output_path.with_suffix(".tmp.epub")
         try:
             with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as zf_output:
                 # 1. mimetype 必须 uncompressed 且排在第一位
@@ -408,13 +441,18 @@ class EpubBook:
                 # 4. all items
                 self._write_items(zf_output)
             
+            if output_path.resolve() == self.epub_path.resolve():
+                backup_path = self.epub_path.with_suffix(".epub.bak")
+                logger.warning(f"Output path conflicts with original file. Backing up to {backup_path}")
+                shutil.move(self.epub_path, backup_path)
+            
             shutil.move(tmp_path, output_path)
+            logger.debug(f"EPUB saved to {output_path}")
         except Exception as e:
             raise e
         finally:
             if tmp_path.exists():
                 tmp_path.unlink(missing_ok=True)
-            logger.info(f"🎉 EPUB saved to {output_path}")
         pass
         
 
@@ -428,16 +466,65 @@ class EpubBook:
         zp.writestr(CONTAINER_PATH, container_bytes)
         pass
 
+    def _update_opf_metadata(self, extra_meta: dict | None = None, overwrite: bool = True):
+        """
+        Updates the <metadata> element of the OPF with additional `<meta property="key">value</meta>` tags.
+
+        Args:
+            extra_meta (dict | None): Dictionary of additional metadata entries (key=property, value=text).
+            overwrite (bool): Whether to overwrite existing properties. Default: True.
+
+        需要修改：
+        1. 先更新 extra_meta， 增加三个属性
+        官方的 modified 时间
+        aeg:generator = APP_NAME
+        aeg:version = APP_VERSION
+        2. 根据 overwrite 参数判断是否覆盖原有的属性
+        3. 使用 epub3 的 property 方式
+        """
+        extra_meta = extra_meta or {}
+        
+        # modified_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        # defaults = {
+        #     "dcterms:modified": modified_str,
+        #     "aeg:generator": APP_NAME,
+        #     "aeg:version": APP_VERSION,
+        # }
+
+        metadata_elem = self.metadata
+
+        for prop, value in extra_meta.items():
+            if not prop or not value:
+                continue
+            existing = metadata_elem.xpath(f'meta[@property="{prop}"]', namespaces=NAMESPACES)
+            if existing:
+                if overwrite:
+                    existing[0].text = value
+                else:
+                    pass  # skip
+            else:
+                ET.SubElement(metadata_elem, "meta", {"property": prop}).text = value
+        pass
+
     def _update_opf_manifest(self):
+        """
+        Rebuilds the <manifest> section of the OPF document based on the current list of manifest items.
+
+        This function clears the existing <item> elements under <manifest> and appends new <item> elements 
+        for each `EpubItem` in `self.manifest`.
+        """
+        # Locate the <manifest> element in the OPF XML
         manifest_elem = self.opf_root.find(".//opf:manifest", namespaces=NAMESPACES)
         if manifest_elem is None:
-            raise EpubException("OPF manifest element not found.")
+            raise EpubStructureError("No <manifest> found in opf")
         
         indent = manifest_elem.text if manifest_elem.text and manifest_elem.text.strip() == "" else "\n  "
 
+        # Remove all existing <item> children under <manifest>
         for child in list(manifest_elem):
             manifest_elem.remove(child)
 
+        # Add new <item> elements for each resource from `manifest` var list in current EpubBook instance
         for item in self.manifest:
             item_elem = ET.Element("item", {
                 "id": item.id,
@@ -528,11 +615,10 @@ def create_epub_item(raw_content: bytes | LazyLoad, id: str, href: str, media_ty
     else:
         return EpubItem(raw_content, id, href, media_type, attrs)
 
-
 def main():
     from audible_epub3_gen.segmenter.html_segmenter import html_segment_and_wrap
 
-    epub_files = Path('input/').glob('*old*.epub')
+    epub_files = Path('input/').glob('*otter*.epub')
     for epub_file in epub_files:
         logger.debug(f"Start Processing: {epub_file}")
         book = EpubBook(epub_file)
@@ -544,12 +630,12 @@ def main():
         chapters = book.get_chapters()
         chapters_count = len(chapters)
         for i, chapter in enumerate(chapters, start=1):
-            logger.debug(f"chapter [{i}/{chapters_count}], id: {chapter.id}, file: {chapter.href}")
-            modified_content = html_segment_and_wrap(chapter.get_text())
-            chapter.set_text(modified_content)
+            logger.debug(f"chapter [{i}/{chapters_count}], id: {chapter.id}, file: {chapter.href}, title: {chapter.get_title()}")
+            # modified_content = html_segment_and_wrap(chapter.get_text())
+            # chapter.set_text(modified_content)
 
-        output_path = Path('output') / f"{epub_file.stem}_new.epub"
-        book.save_epub(output_path)
+        # output_path = Path('output') / f"{epub_file.stem}_new.epub"
+        # book.save_epub(output_path)
         logger.debug("Done processing.")
     pass
 

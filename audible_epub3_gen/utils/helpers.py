@@ -1,12 +1,13 @@
 import logging, math, json, os, sys
 import requests
+from html import escape
 from pathlib import Path
 from rapidfuzz import fuzz
 from dataclasses import asdict
 
 from audible_epub3_gen.config import settings, AZURE_TTS_KEY, AZURE_TTS_REGION
 from audible_epub3_gen.utils import logging_setup
-from audible_epub3_gen.utils.types import WordBoundary
+from audible_epub3_gen.utils.types import WordBoundary, TagAlignment
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ def save_wbs_as_json(word_boundaries: list[WordBoundary], output_file: Path):
     pass
 
 
-def force_alignment(sentences: list[str], word_boundaries: list[WordBoundary], threshold: float = 95.0) -> list[tuple[int, int]]:
+def align_sentences_and_wordboundaries(sentences: list[str], word_boundaries: list[WordBoundary], threshold: float = 95.0) -> list[tuple[int, int]]:
     """
     Aligns each sentence in `sentences` to a best-matching span of word boundaries using fuzzy string matching.
 
@@ -42,11 +43,11 @@ def force_alignment(sentences: list[str], word_boundaries: list[WordBoundary], t
     Args:
         sentences (list[str]): A list of segmented sentences in text form.
         word_boundaries (list[WordBoundary]): A list of word boundary objects, assumed to be in correct order.
-        threshold (float): Minimum fuzzy match score (0-100) required to accept a match. Default is 98.0.
+        threshold (float): Minimum fuzzy match score (0-100) required to accept a match. Default is 95.0.
 
     Returns:
         list[tuple[int, int]]: A list of `(start_index, end_index)` tuples corresponding to the indices in 
-        `word_boundaries` that best align with each sentence. If a sentence cannot be aligned, `(-1, -1)` is returned for that entry.
+        `word_boundaries` that best align with each sentence in `sentences` list. If a sentence cannot be aligned, `(-1, -1)` is returned for that entry.
 
     Notes:
         - Matching is case-insensitive and ignores all whitespace.
@@ -54,7 +55,7 @@ def force_alignment(sentences: list[str], word_boundaries: list[WordBoundary], t
         - Alignment is greedy and advances `cur_offset` after each sentence match.
         - Assumes sentences and word boundaries are in correct temporal/textual order.
     """
-    result = []
+    result = [(-1, -1)] * len(sentences)
 
     wb_texts = [normalize_text(wb.text) for wb in word_boundaries]
     wb_chars = "".join(wb_texts)
@@ -108,6 +109,7 @@ def force_alignment(sentences: list[str], word_boundaries: list[WordBoundary], t
                 if score > best_score:
                     best_score = score
                     best_match = (start, end)
+                
                 if math.isclose(score, 100):
                     break  # early exit
             
@@ -132,16 +134,89 @@ def force_alignment(sentences: list[str], word_boundaries: list[WordBoundary], t
                     else:
                         break
             
-            result.append(best_match)
+            result[sent_idx] = best_match
             cur_wb_start_idx = best_match[1] + 1
             unmatched_sent_chars = 0  # reset
             logger.debug(f"Alignment success for sentence: [{sent}] (best_score: {best_score:.3f}) (best_match: {''.join(wbtext for wbtext in wb_texts[best_match[0]: best_match[1]+1])})")
         else:
-            result.append((-1, -1))
+            result[sent_idx] = (-1, -1)
             unmatched_sent_chars += target_text_len
             logger.warning(f"Alignment faild for sentence: [{sent}] (best_score: {best_score:.3f}) (best_match: {''.join(wbtext for wbtext in wb_texts[best_match[0]: best_match[1]+1])})")
     
     return result
+
+def force_alignment(taged_sentences: list[tuple[str, str]], word_boundaries: list[WordBoundary], threshold: float = 95.0) -> list[TagAlignment]:
+    """
+    Generate a list of TagAlignment objects for EPUB Media Overlay (SMIL) playback.
+
+    In EPUB Media Overlays, <par> elements are played in sequence, and any gap between
+    adjacent audio segments will will cause a playback jump, skipping the unaligned time range. 
+    To ensure smooth playback, this function guarantees time continuity by adjusting alignments so that:
+        
+        `alignment[i].end_ms == alignment[i+1].start_ms`
+    
+    Args:
+        taged_sentences (list[(tag_id, tag_text)]): A list of (tag_id, tag_text) in tuple form.
+        word_boundaries (list[WordBoundary]): A list of word boundary objects, assumed to be in correct order.
+        threshold (float): Minimum fuzzy match score (0-100) required to accept a match. Default is 95.0.
+    """
+    sentences = [idx_sent[1] for idx_sent in taged_sentences]
+    raw_aligns = align_sentences_and_wordboundaries(sentences, word_boundaries, threshold)
+    alignments: list[TagAlignment] = []
+    
+    unmatched_counter = 0
+    unmatched_groups = []
+    unmatched_group = []
+    unmatched_chars = 0
+    for idx, (tag_id, sentence) in enumerate(taged_sentences):
+        start_wb, end_wb = raw_aligns[idx]
+        
+        if end_wb < 0:
+            # Sentence failed to align — store in group for later interpolation
+            unmatched_counter += 1
+            unmatched_group.append(idx)
+            unmatched_chars += len(sentence)
+            alignments.append(TagAlignment(tag_id=tag_id, start_ms=-1, end_ms=-1))  # placeholder
+        else:
+            start_ms = word_boundaries[start_wb].start_ms
+            end_ms = word_boundaries[end_wb].end_ms
+            alignments.append(TagAlignment(tag_id=tag_id, start_ms=start_ms, end_ms=end_ms))        
+        
+            if unmatched_group:
+                # 1. Collect unmatched_group
+                unmatched_groups.append( (unmatched_group, unmatched_chars) )
+
+                # 2. Flush previously unmatched group
+                unmatched_group = []
+                unmatched_chars = 0
+    
+    # Interpolate alignment spans for unmatched sentences
+    for gp, gp_chars in unmatched_groups:
+        gp_start_idx = gp[0]
+        gp_end_idx = gp[-1]
+        gp_start_ms = alignments[gp_start_idx-1].end_ms if gp_start_idx > 0 else word_boundaries[0].start_ms
+        gp_end_ms = alignments[gp_end_idx+1].start_ms if (gp_end_idx+1) < len(alignments) else word_boundaries[-1].end_ms
+        gp_total_ms = gp_end_ms - gp_start_ms
+        cur_offset_ms = 0
+        for idx in gp:
+            alignments[idx].start_ms = gp_start_ms + cur_offset_ms
+            idx_ms = gp_total_ms * len(taged_sentences[idx][1]) / gp_chars
+            alignments[idx].end_ms = alignments[idx].start_ms + idx_ms
+            cur_offset_ms += idx_ms 
+        pass
+
+    # Ensure continuous playback: a[i].end_ms == a[i+1].start_ms
+    for i in range(len(alignments) - 1):
+        alignments[i].end_ms = alignments[i+1].start_ms
+
+    total_counter = len(alignments)
+    match_counter = total_counter - unmatched_counter
+    logger.info(
+        f"[FA] Matched alignments: {match_counter}/{total_counter} ({match_counter / total_counter:.1%}), "
+        f"Interpolated alignments: {unmatched_counter}/{total_counter} ({unmatched_counter / total_counter:.1%})"
+    )
+
+    return alignments
 
 
 def get_langs_voices_azure(subscription_key: str, region: str) -> dict[str, list[str]]:
@@ -234,3 +309,75 @@ def confirm_or_exit(msg: str):
         logger.debug(f"{msg} → Aborted by user.")
         print("Aborted by user.")
         sys.exit(1)
+
+def format_smil_time(ms: float) -> str:
+    total_seconds = int(ms // 1000)
+    milliseconds = int(ms % 1000)
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    return f"{hours}:{minutes:02}:{seconds:02}.{milliseconds:03}"
+
+def generate_smil(smil_href: str, xhtml_href: str, audio_href: str, alignments: list[TagAlignment]) -> str:
+    """
+    Generates a SMIL XML string for EPUB 3 Media Overlay.
+
+    Args:
+        smil_href (str): The href of the SMIL file (relative to EPUB root).
+        xhtml_href (str): Relative path to the XHTML file (e.g., "text/ch1.xhtml").
+        audio_href (str): Relative path to the MP3 file (e.g., "audio/ch1.mp3").
+        alignments (list of TagAlignment): Each item links an HTML tag to an audio time span.
+
+    Returns:
+        str: A string of SMIL XML content.
+    """
+    smil_lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<smil xmlns="http://www.w3.org/ns/SMIL" xmlns:epub="http://www.idpf.org/2007/ops" version="3.0">',
+        '  <body>',
+        '    <seq>'
+    ]
+
+    for idx, align in enumerate(alignments, start=1):
+        smil_dir = Path(smil_href).parent
+        xhtml_rel = os.path.relpath(xhtml_href, start=smil_dir)
+        audio_rel = os.path.relpath(audio_href, start=smil_dir)
+        
+        text_src   = f"{escape(xhtml_rel)}#{escape(align.tag_id)}"
+        audio_src  = escape(audio_rel)
+        clip_begin = format_smil_time(align.start_ms)
+        clip_end   = format_smil_time(align.end_ms)
+
+        smil_lines += [
+            f'      <par id="p{idx:05d}">',
+            f'        <text src="{text_src}"/>',
+            f'        <audio src="{audio_src}" clipBegin="{clip_begin}" clipEnd="{clip_end}"/>',
+            f'      </par>'
+        ]
+
+    smil_lines += [
+        '    </seq>',
+        '  </body>',
+        '</smil>'
+    ]
+
+    return "\n".join(smil_lines)
+
+
+def format_bytes(size_bytes: int) -> str:
+    """
+    Converts a file size in bytes to a human-readable string.
+    
+    Args:
+        size_bytes (int): File size in bytes.
+    
+    Returns:
+        str: Formatted file size (e.g., '2.34 MB').
+    """
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(size_bytes)
+    for unit in units:
+        if size < 1024:
+            return f"{size:.2f} {unit}"
+        size /= 1024
+    return f"{size:.2f} PB"

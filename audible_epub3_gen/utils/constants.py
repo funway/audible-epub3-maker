@@ -1,8 +1,11 @@
 from pathlib import Path
 ## Internal configuration (not intended for user modification) ##
 
-APP_NAME = "Audible EPUB3 Gen"
+APP_NAME = "Audible EPUB3 Maker"
 APP_VERSION = "0.1.1"
+APP_FULLNAME = APP_NAME + " v" + APP_VERSION
+APP_IN_DEV = True
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # logging config
@@ -12,5 +15,13 @@ LOG_FORMAT = "%(asctime)s %(levelname)s [p%(process)d,t%(thread)d] %(name)s.%(fu
 
 # HTML segmentation config
 BEAUTIFULSOUP_PARSER = "lxml-xml"
+SEG_TAG = "span"
 SEG_ID_PREFIX = "ae"
 SEG_MARK_ATTR = "data-ae-x"
+
+AUDIO_MIMETYPES = {
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".mp4": "audio/mp4",
+    ".ogg": "audio/ogg",
+}
