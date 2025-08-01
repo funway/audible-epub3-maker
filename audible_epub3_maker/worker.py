@@ -43,10 +43,7 @@ def task_fn(payload: TaskPayload):
     # 1. TTS synthesis
     tts = create_tts_engine(settings.tts_engine)
     wb_list = tts.html_to_speech(original_html, audio_output_file)
-    ## save word boudaries
-    wbs_file = audio_output_file.with_name(audio_output_file.stem + ".wbs")
-    helpers.save_wbs_as_json(wb_list, wbs_file)
-    logger.info(f"[task {payload.task_id}] ✅ Generated audio: {audio_output_file}, Size: {helpers.format_bytes(audio_output_file.stat().st_size)}")
+    logger.info(f"[task {payload.task_id}] 🔈 Generated audio: {audio_output_file}, Size: {helpers.format_bytes(audio_output_file.stat().st_size)}")
 
     # 2. Parse HTML and segment by new tag.
     segmented_html = html_segment_and_wrap(original_html)
@@ -60,7 +57,6 @@ def task_fn(payload: TaskPayload):
     return TaskResult(task_id = payload.task_id,
                       taged_html = segmented_html,
                       audio_file= audio_output_file,
-                      wbs_file = wbs_file,
                       alignments = alignments,
                       )
 

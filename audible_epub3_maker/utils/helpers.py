@@ -381,3 +381,10 @@ def format_bytes(size_bytes: int) -> str:
             return f"{size:.2f} {unit}"
         size /= 1024
     return f"{size:.2f} PB"
+
+
+def save_text(text: str, file_path: Path, encoding: str = "utf-8"):
+    if not file_path.parent.exists():
+        raise FileNotFoundError(f"Directory does not exist: {file_path.parent}")
+    
+    file_path.write_text(text, encoding=encoding)

@@ -53,26 +53,25 @@ class TaskResult(object):
     task_id: int | str
     taged_html: str
     audio_file: Path
-    wbs_file: Path
     alignments: list[TagAlignment]
 
     def __str__(self):
         return (
             f"<{self.__class__.__name__} "
             f"task_id={self.task_id}, "
-            f"{self.audio_file}, {self.wbs_file}, {len(self.alignments)} alignments ...>"
+            f"{self.audio_file}, {len(self.alignments)} alignments ...>"
         )
 
 @dataclass
 class TaskErrorResult(object):
-    task_payload: TaskPayload
+    payload: TaskPayload
     error_type: str
     error_msg: str
 
     def __str__(self):
         return (
             f"<{self.__class__.__name__} "
-            f"task_id={self.task_payload.task_id}, "
+            f"task_id={self.payload.task_id}, "
             f"{self.error_type}, {self.error_msg} ...>"
         )
 

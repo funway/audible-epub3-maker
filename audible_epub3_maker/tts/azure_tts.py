@@ -9,7 +9,7 @@ from audible_epub3_maker.utils import logging_setup
 from audible_epub3_maker.utils import helpers
 from audible_epub3_maker.utils.types import WordBoundary, TTSEmptyAudioError, TTSEmptyContentError
 from audible_epub3_maker.utils.constants import BEAUTIFULSOUP_PARSER, SEG_MARK_ATTR, SEG_TAG
-from audible_epub3_maker.config import AZURE_TTS_KEY, AZURE_TTS_REGION, settings
+from audible_epub3_maker.config import AZURE_TTS_KEY, AZURE_TTS_REGION, settings, in_dev
 from audible_epub3_maker.tts.base_tts import BaseTTS
 from audible_epub3_maker.segmenter import html_segmenter, text_segmenter
 
@@ -32,7 +32,7 @@ class AzureTTS(BaseTTS):
         """
         Returns an SSML <break> tag with the given pause time in milliseconds.
 
-        A leading newline is added to improve word boundary detection between words surrounding a break.
+        A leading newline is added to improve TTS word boundary detection between words surrounding a break.
         """
         return f'\n<break time="{break_time_ms}ms" />'
 
@@ -73,7 +73,7 @@ class AzureTTS(BaseTTS):
         pass
 
     def _break_html_into_text_chunks(self, html_text: str) -> list[str]:
-        """将 HTML 正文内容切分成多个文本块 (会引入 SSML break 标签)，每个块的大小不超过 max_bytes_per_request 字节。
+        """将 HTML 正文内容切分成多个文本块 (会引入 SSML break 标签)，每个块的大小不超过 max_chars_per_chunk。
 
         Args:
             html_text (str): _description_
@@ -92,14 +92,31 @@ class AzureTTS(BaseTTS):
             "li": "_#BRK1#",
             "p" : "_#BRK1#",
         }
+        # 1.1 给 HTML 中指定的标签尾部添加 #BRK 标记 (因为 h1 的文字经常没有句号)
         html_with_break_mark = html_segmenter.append_suffix_to_tags(html_text, suffix_map=break_map)
         logger.debug(f"HTML with BREAK mark: \n{html_with_break_mark}")
         
         soup = BeautifulSoup(html_with_break_mark, BEAUTIFULSOUP_PARSER)
         body_text = soup.body.get_text() if soup.body else soup.get_text()
-        sentences_with_inline_break_mark = text_segmenter.segment_text_by_re(body_text)
+        
+        # 1.2 处理换行符，对于 TTS 而言，换行符会认为是发音的一个停顿，空格则不会引起停顿。
+        # 而对于 HTML 而言，一个标签文本中的换行符通常是无效的。
+        if settings.newline_mode == "single":
+            cleaned_text = body_text
+        elif settings.newline_mode == "multi":
+            tmp_text = re.sub(r"\n(?:\s*\n)+", "_#NLINE#_", body_text)  # 多个换行 => 标记
+            tmp_text = re.sub(r"\n", " ", tmp_text)                     # 单个换行 => 空格
+            cleaned_text = tmp_text.replace("_#NLINE#_", "\n")          # 多个换行 => 单个换行
+        elif settings.newline_mode == "none":
+            cleaned_text = re.sub(r"\n+", " ", body_text)
+        else:
+            raise ValueError(f"Unsupported newline_mode: {settings.newline_mode}")
+
+        # 1.3 带着 #BRK 标记做分句
+        sentences_with_inline_break_mark = text_segmenter.segment_text_by_re(cleaned_text)
         logger.debug(f"Sentences with inline break mark: \n{sentences_with_inline_break_mark}")
         
+        # 1.4 替换 #BRK 标记为 SSML 支持的 <break 标签>
         sentences_and_ssml_breaks = []
         break_pattern = re.compile(r"(_#BRK\d#)")
         for sentence_with_break in sentences_with_inline_break_mark:
@@ -139,8 +156,10 @@ class AzureTTS(BaseTTS):
 
         ssml = (
             f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" '
-            f'xmlns:mstts="http://www.w3.org/2001/mstts" xml:lang="{settings.tts_lang}">'
-            f'<voice name="{settings.tts_voice}"> {text} </voice>'
+            f'xmlns:mstts="http://www.w3.org/2001/mstts" xml:lang="{settings.tts_lang}">\n'
+            f'  <voice name="{settings.tts_voice}">\n'
+            f'    {text}\n'
+            f'  </voice>\n'
             f'</speak>'
         )
         logger.debug(f"SSML chunk: {ssml}")
@@ -233,7 +252,7 @@ class AzureTTS(BaseTTS):
         text_chunks = self._break_html_into_text_chunks(html_text)
         if not text_chunks:
             raise TTSEmptyContentError("Input HTML contains no valid text content.")
-
+        
         # 2. tts
         chunks = []
         for i, text_chunk in enumerate(text_chunks):
@@ -255,7 +274,19 @@ class AzureTTS(BaseTTS):
         # 4. save merged audio
         self._save_audio(merged_audio, output_file, metadata)
         
-        # 5. clear chunks tmp file
+        # 5. save chunks text and wbs
+        if in_dev():
+            merged_texts = "\n\n##### chunk ######\n\n".join(text_chunks)
+            text_file = output_file.with_suffix(".chunks.txt")
+            helpers.save_text(merged_texts, text_file)
+
+            wbs_file = output_file.with_suffix(".wbs.txt")
+            helpers.save_wbs_as_json(merged_wbs, wbs_file)
+
+            html_file = output_file.with_suffix(".original_html.txt")
+            helpers.save_text(html_text, html_file)
+        
+        # 5. clear temp audio_chunk
         for chunk in chunks:
             chunk["audio_file"].unlink(missing_ok=True)
 
@@ -269,10 +300,7 @@ def main():
         xmlns:mstts="http://www.w3.org/2001/mstts"
         xml:lang="en-US">
     <voice name="en-us-avaMultilingualNeural">
-        It made the boy sad to see the old man come in each
-day with his skiff empty and he always went down to help him carry
-either the coiled lines or the gaff and harpoon and the sail that was
-furled around the mast.  The sail was patched with flour sacks and,
+<break time="10ms" />
     </voice>
     </speak>
     """

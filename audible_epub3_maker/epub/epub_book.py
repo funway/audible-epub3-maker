@@ -473,16 +473,10 @@ class EpubBook:
         Args:
             extra_meta (dict | None): Dictionary of additional metadata entries (key=property, value=text).
             overwrite (bool): Whether to overwrite existing properties. Default: True.
-
-        需要修改：
-        1. 先更新 extra_meta， 增加三个属性
-        官方的 modified 时间
-        aeg:generator = APP_NAME
-        aeg:version = APP_VERSION
-        2. 根据 overwrite 参数判断是否覆盖原有的属性
-        3. 使用 epub3 的 property 方式
         """
+        # TODO: 未完成，考虑如何加自定义属性 (是否需要添加命名空间？)
         extra_meta = extra_meta or {}
+        raise NotImplementedError
         
         # modified_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         # defaults = {

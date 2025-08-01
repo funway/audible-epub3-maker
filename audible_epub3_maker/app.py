@@ -23,7 +23,8 @@ class App(object):
     
     def run(self):
         helpers.validate_settings()
-
+        logger.debug(f"⚙️ Settings: {settings.to_dict()}")
+        
         book = EpubBook(settings.input_file)
         logger.info(f"📕 EPUB Book Info: title = [{book.title}], identifier = [{book.identifier}], language = [{book.language}]")
 
@@ -54,7 +55,6 @@ class App(object):
                                              audio_metadata=chapter_audio_metadata,
                                              ))
             pass
-        
         
         # Dispatch tasks and wait for completion
         logger.info(f"🚀 Start processing {settings.input_file} ...")

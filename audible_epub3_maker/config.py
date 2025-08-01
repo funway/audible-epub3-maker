@@ -6,7 +6,10 @@ from dotenv import load_dotenv
 load_dotenv(override=False)  # Load the .env file into system env if it exists
 AZURE_TTS_KEY = os.environ.get("AZURE_TTS_KEY", "YOUR_AZURE_SPEECH_KEY")
 AZURE_TTS_REGION = os.environ.get("AZURE_TTS_REGION", "YOUR_REGION")
+AUDIBLE_EPUB3_MAKER_ENV = os.environ.get("AUDIBLE_EPUB3_MAKER_ENV", "production")
 
+def in_dev() -> bool:
+    return AUDIBLE_EPUB3_MAKER_ENV.lower() in {"dev", "development"}
 
 ## User-specified command-line options ##
 class UserSettings:
@@ -30,6 +33,8 @@ class UserSettings:
 
         # Multi-process (workers)
         self.max_workers: int = 3
+
+        self.newline_mode: str = "multi"
         pass
     
     def update(self, args: dict) -> None:

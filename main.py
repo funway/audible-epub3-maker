@@ -82,6 +82,18 @@ def parse_args():
         help="Max count of multi-processing workers for audio and alignment generating (default: 3)"
     )
 
+    parser.add_argument(
+        "--newline_mode",
+        choices=["none", "single", "multi"],
+        default="multi",
+        help=(
+            "How to handle newlines in HTML text:\n"
+            "none      - remove all newlines and replace them with space\n"
+            "single    - preserve all newlines as-is\n"
+            "multi     - collapse 2 or more consecutive newlines (with optional spaces/tabs) into one newline"
+        ),
+    )
+
     return parser.parse_args()
 
 def main():
