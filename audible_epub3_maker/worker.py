@@ -2,12 +2,12 @@ import logging
 import traceback
 from bs4 import BeautifulSoup
 
-from audible_epub3_gen.config import settings
-from audible_epub3_gen.utils import logging_setup, helpers
-from audible_epub3_gen.utils.types import TaskPayload, TaskResult, TaskErrorResult
-from audible_epub3_gen.utils.constants import BEAUTIFULSOUP_PARSER, SEG_MARK_ATTR, SEG_TAG
-from audible_epub3_gen.tts import create_tts_engine
-from audible_epub3_gen.segmenter.html_segmenter import html_segment_and_wrap
+from audible_epub3_maker.config import settings
+from audible_epub3_maker.utils import logging_setup, helpers
+from audible_epub3_maker.utils.types import TaskPayload, TaskResult, TaskErrorResult
+from audible_epub3_maker.utils.constants import BEAUTIFULSOUP_PARSER, SEG_MARK_ATTR, SEG_TAG
+from audible_epub3_maker.tts import create_tts_engine
+from audible_epub3_maker.segmenter.html_segmenter import html_segment_and_wrap
 
 logger = logging.getLogger(__name__)
 

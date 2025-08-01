@@ -1,8 +1,8 @@
 import os
 import pytest
 
-from audible_epub3_gen.config import INPUT_DIR
-from audible_epub3_gen.epub.epub_parser import EpubParser
+from audible_epub3_maker.config import INPUT_DIR
+from audible_epub3_maker.epub.epub_parser import EpubParser
 
 
 epub_files = list(INPUT_DIR.glob('*.epub'))

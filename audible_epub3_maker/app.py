@@ -3,14 +3,14 @@ from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import Queue, current_process
 
-from audible_epub3_gen.config import settings
-from audible_epub3_gen.utils import helpers
-from audible_epub3_gen.utils import logging_setup
-from audible_epub3_gen.utils.constants import BASE_DIR, APP_FULLNAME, AUDIO_MIMETYPES
-from audible_epub3_gen.utils.types import TaskPayload
-from audible_epub3_gen.epub.epub_book import EpubBook, EpubHTML, EpubAudio, LazyLoadFromFile, EpubSMIL
-from audible_epub3_gen.segmenter.html_segmenter import html_segment_and_wrap
-from audible_epub3_gen.worker import init_worker, task_fn_wrap
+from audible_epub3_maker.config import settings
+from audible_epub3_maker.utils import helpers
+from audible_epub3_maker.utils import logging_setup
+from audible_epub3_maker.utils.constants import BASE_DIR, APP_FULLNAME, AUDIO_MIMETYPES
+from audible_epub3_maker.utils.types import TaskPayload
+from audible_epub3_maker.epub.epub_book import EpubBook, EpubHTML, EpubAudio, LazyLoadFromFile, EpubSMIL
+from audible_epub3_maker.segmenter.html_segmenter import html_segment_and_wrap
+from audible_epub3_maker.worker import init_worker, task_fn_wrap
 
 logger = logging.getLogger(__name__)
 

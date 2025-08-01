@@ -2,8 +2,8 @@ import argparse
 import logging
 from pathlib import Path
 
-from audible_epub3_gen.config import settings
-from audible_epub3_gen.app import App
+from audible_epub3_maker.config import settings
+from audible_epub3_maker.app import App
 
 def parse_args():
     parser = argparse.ArgumentParser(

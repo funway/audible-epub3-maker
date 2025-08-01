@@ -8,8 +8,8 @@ from pathlib import Path, PurePosixPath
 from dataclasses import dataclass
 from lxml import etree as ET
 
-from audible_epub3_gen.utils import logging_setup
-from audible_epub3_gen.epub.utils import guess_media_type, parse_xml, list_files_in_zip
+from audible_epub3_maker.utils import logging_setup
+from audible_epub3_maker.epub.utils import guess_media_type, parse_xml, list_files_in_zip
 
 logger = logging.getLogger(__name__)
 
@@ -616,7 +616,7 @@ def create_epub_item(raw_content: bytes | LazyLoad, id: str, href: str, media_ty
         return EpubItem(raw_content, id, href, media_type, attrs)
 
 def main():
-    from audible_epub3_gen.segmenter.html_segmenter import html_segment_and_wrap
+    from audible_epub3_maker.segmenter.html_segmenter import html_segment_and_wrap
 
     epub_files = Path('input/').glob('*otter*.epub')
     for epub_file in epub_files:

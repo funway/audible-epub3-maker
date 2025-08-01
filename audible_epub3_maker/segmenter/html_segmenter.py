@@ -2,9 +2,9 @@ import re
 import logging
 from bs4 import BeautifulSoup, Tag, NavigableString
 
-from audible_epub3_gen.utils import logging_setup
-from audible_epub3_gen.utils.constants import BEAUTIFULSOUP_PARSER, SEG_ID_PREFIX, SEG_MARK_ATTR
-from audible_epub3_gen.segmenter.text_segmenter import segment_text_by_re, is_readable
+from audible_epub3_maker.utils import logging_setup
+from audible_epub3_maker.utils.constants import BEAUTIFULSOUP_PARSER, SEG_ID_PREFIX, SEG_MARK_ATTR
+from audible_epub3_maker.segmenter.text_segmenter import segment_text_by_re, is_readable
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +174,7 @@ def html_segment_and_wrap(html_text: str, wrapping_tag: str = "span") -> str:
             new_elem["id"] = id_value
             counter += 1
         else:
-            logger.warning(f"One <{wrapping_tag}> tag already has an id: {new_elem["id"]}")
+            logger.warning(f"One <{wrapping_tag}> tag already has an id: {new_elem['id']}")
 
     return str(soup)
 

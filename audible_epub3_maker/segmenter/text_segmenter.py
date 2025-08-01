@@ -2,7 +2,7 @@ import logging
 import re
 import unicodedata
 
-from audible_epub3_gen.utils import logging_setup
+from audible_epub3_maker.utils import logging_setup
 
 logger = logging.getLogger(__name__)
 

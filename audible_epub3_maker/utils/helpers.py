@@ -5,9 +5,9 @@ from pathlib import Path
 from rapidfuzz import fuzz
 from dataclasses import asdict
 
-from audible_epub3_gen.config import settings, AZURE_TTS_KEY, AZURE_TTS_REGION
-from audible_epub3_gen.utils import logging_setup
-from audible_epub3_gen.utils.types import WordBoundary, TagAlignment
+from audible_epub3_maker.config import settings, AZURE_TTS_KEY, AZURE_TTS_REGION
+from audible_epub3_maker.utils import logging_setup
+from audible_epub3_maker.utils.types import WordBoundary, TagAlignment
 
 logger = logging.getLogger(__name__)
 

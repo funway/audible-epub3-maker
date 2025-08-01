@@ -5,13 +5,13 @@ from pydub import AudioSegment
 from rapidfuzz import fuzz
 import azure.cognitiveservices.speech as speechsdk
 
-from audible_epub3_gen.utils import logging_setup
-from audible_epub3_gen.utils import helpers
-from audible_epub3_gen.utils.types import WordBoundary, TTSEmptyAudioError, TTSEmptyContentError
-from audible_epub3_gen.utils.constants import BEAUTIFULSOUP_PARSER, SEG_MARK_ATTR, SEG_TAG
-from audible_epub3_gen.config import AZURE_TTS_KEY, AZURE_TTS_REGION, settings
-from audible_epub3_gen.tts.base_tts import BaseTTS
-from audible_epub3_gen.segmenter import html_segmenter, text_segmenter
+from audible_epub3_maker.utils import logging_setup
+from audible_epub3_maker.utils import helpers
+from audible_epub3_maker.utils.types import WordBoundary, TTSEmptyAudioError, TTSEmptyContentError
+from audible_epub3_maker.utils.constants import BEAUTIFULSOUP_PARSER, SEG_MARK_ATTR, SEG_TAG
+from audible_epub3_maker.config import AZURE_TTS_KEY, AZURE_TTS_REGION, settings
+from audible_epub3_maker.tts.base_tts import BaseTTS
+from audible_epub3_maker.segmenter import html_segmenter, text_segmenter
 
 logger = logging.getLogger(__name__)
 # logging.getLogger('pydub.converter').setLevel(max(logging.INFO, logger.getEffectiveLevel()))

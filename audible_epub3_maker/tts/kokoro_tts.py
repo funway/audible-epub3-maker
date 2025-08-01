@@ -1,4 +1,4 @@
-from audible_epub3_gen.tts.base_tts import BaseTTS
+from audible_epub3_maker.tts.base_tts import BaseTTS
 
 class KokoroTTS(BaseTTS):
     

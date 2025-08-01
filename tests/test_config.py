@@ -1,4 +1,4 @@
-from audible_epub3_gen import config
+from audible_epub3_maker import config
 
 def test_azure_tts_config():
     assert config.AZURE_TTS_KEY, "AZURE_TTS_KEY is not set"

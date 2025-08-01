@@ -160,7 +160,7 @@ test_data = [
 
 @pytest.mark.parametrize("test_case", test_data)
 def test_segment_text_by_re(test_case):
-    from audible_epub3_gen.utils.text_parser import segment_text_by_re
+    from audible_epub3_maker.utils.text_parser import segment_text_by_re
 
     text = test_case["text_input"]
     expected_output = test_case["expected_outputs"]
@@ -218,7 +218,7 @@ test_data = [
 
 @pytest.mark.parametrize("test_case", test_data)
 def test_replace_non_terminal_dot(test_case):
-    from audible_epub3_gen.utils.text_parser import replace_non_terminal_dot, restore_non_terminal_dot
+    from audible_epub3_maker.utils.text_parser import replace_non_terminal_dot, restore_non_terminal_dot
     
     text = test_case["text_input"]
     expected_output = test_case["expected_output"]
@@ -250,5 +250,5 @@ is_readable_test_data = [
 
 @pytest.mark.parametrize("text, expected", is_readable_test_data)
 def test_is_readable(text, expected):
-    from audible_epub3_gen.utils.text_parser import is_readable
+    from audible_epub3_maker.utils.text_parser import is_readable
     assert is_readable(text) is expected

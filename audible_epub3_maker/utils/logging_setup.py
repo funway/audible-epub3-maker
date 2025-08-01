@@ -3,8 +3,8 @@ import logging
 from logging.handlers import RotatingFileHandler, QueueHandler, QueueListener
 from multiprocessing import Queue, current_process
 
-from audible_epub3_gen.config import settings
-from audible_epub3_gen.utils.constants import LOG_FILE, LOG_DIR, LOG_FORMAT
+from audible_epub3_maker.config import settings
+from audible_epub3_maker.utils.constants import LOG_FILE, LOG_DIR, LOG_FORMAT
 
 
 _log_queue = None
