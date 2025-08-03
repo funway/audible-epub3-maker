@@ -331,24 +331,24 @@ def validate_tts_settings():
 
     elif "kokoro" == settings.tts_engine:
         langs_voices = get_langs_voices_kokoro()
-        # langs_voices_lowers = {
-        #     lang.lower(): [v.lower() for v in voices]
-        #     for lang, voices in langs_voices.items()
-        # }
+        langs_voices_lowers = {
+            lang.lower(): [v.lower() for v in voices]
+            for lang, voices in langs_voices.items()
+        }
 
-        # lang = settings.tts_lang.lower()
-        # voice = settings.tts_voice.lower()
+        lang = settings.tts_lang.lower()
+        voice = settings.tts_voice.lower()
 
-        # if lang not in langs_voices_lowers:
-        #     raise ValueError(
-        #         f"Kokoro TTS may not support language '{settings.tts_lang}', "
-        #         f"or it does not support word boundaries (token timestamp) for that language."
-        #     )
+        if lang not in langs_voices_lowers:
+            raise ValueError(
+                f"Kokoro TTS may not support language '{settings.tts_lang}', "
+                f"or it does not support word boundaries (token timestamp) for that language."
+            )
 
-        # if voice not in langs_voices_lowers[lang]:
-        #     raise ValueError(
-        #         f"Kokoro TTS does not support voice '{settings.tts_voice}' for language '{settings.tts_lang}'"
-        #     )
+        if voice not in langs_voices_lowers[lang]:
+            raise ValueError(
+                f"Kokoro TTS does not support voice '{settings.tts_voice}' for language '{settings.tts_lang}'"
+            )
     else:
         raise ValueError(f"Unsupported TTS engine: {settings.tts_engine}")
     

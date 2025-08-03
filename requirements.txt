@@ -13,4 +13,6 @@ azure-cognitiveservices-speech
 # Kokoro TTS
 kokoro>=0.9.4
 soundfile
-misaki[zh]  # should be removed
+
+# Web GUI
+gradio
