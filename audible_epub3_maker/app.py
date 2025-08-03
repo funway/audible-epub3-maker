@@ -92,7 +92,7 @@ class App(object):
 
                     # 2. Add SMIL
                     smil_href = str(chapter.href) + ".smil"
-                    smil_text = helpers.generate_smil(smil_href, chapter.href, aud_href, task_result.alignments)
+                    smil_text = helpers.generate_smil_content(smil_href, chapter.href, aud_href, task_result.alignments)
                     smil_id = f"sm_{task_result.task_id}"
                     smil_item = EpubSMIL(raw_content = smil_text.encode(),
                                          id = smil_id,

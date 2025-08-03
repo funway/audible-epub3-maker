@@ -3,6 +3,7 @@
 __pycache__/
 input/
 output/
+dev_output/
 .venv/
 .venv_*/
 .idea/

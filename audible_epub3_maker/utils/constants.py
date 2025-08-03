@@ -7,6 +7,7 @@ APP_FULLNAME = APP_NAME + " v" + APP_VERSION
 APP_IN_DEV = True
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+DEV_OUTPUT = BASE_DIR / "dev_output"
 
 # logging config
 LOG_DIR = BASE_DIR / "logs"

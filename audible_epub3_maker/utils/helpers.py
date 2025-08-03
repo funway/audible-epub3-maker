@@ -8,6 +8,7 @@ from dataclasses import asdict
 from audible_epub3_maker.config import settings, AZURE_TTS_KEY, AZURE_TTS_REGION, in_dev
 from audible_epub3_maker.utils import logging_setup
 from audible_epub3_maker.utils.types import WordBoundary, TagAlignment
+from audible_epub3_maker.utils.constants import DEV_OUTPUT
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,7 @@ def align_sentences_and_wordboundaries(sentences: list[str],
     
     cur_wb_start_idx = 0  # current starting index in word boundaries
     unmatched_sent_chars = 0
+    matched_counter = 0
 
     for sent_idx, sent in enumerate(sentences):
         # logger.debug(f"Matching sentence [{sent_idx}]: {sent}")
@@ -145,6 +147,7 @@ def align_sentences_and_wordboundaries(sentences: list[str],
             result[sent_idx] = best_match
             cur_wb_start_idx = best_match[1] + 1
             unmatched_sent_chars = 0  # reset unmatched chars
+            matched_counter += 1
         else:
             result[sent_idx] = (-1, -1)
             unmatched_sent_chars += target_text_len  # increase unmatched chars
@@ -156,7 +159,9 @@ def align_sentences_and_wordboundaries(sentences: list[str],
         logger.debug(dev_output[-1])
 
         if in_dev():
-            dev_output_file = dev_output_file or Path(f"aligns_p{os.getpid()}.txt")
+            # save alignments data in development env.
+            dev_output.append(f"\n\n📊 Total sentences: {len(sentences)}, Matched sentences: {matched_counter}, Word boundaries: {len(word_boundaries)}")
+            dev_output_file = dev_output_file or Path(DEV_OUTPUT / f"aligns_p{os.getpid()}.txt")
             dev_output_file.write_text("\n".join(dev_output))
 
     return result
@@ -294,7 +299,8 @@ def validate_tts_settings():
             )
 
     elif "kokoro" == settings.tts_engine:
-        raise NotImplementedError()
+        # raise NotImplementedError()
+        pass
     
 
 def validate_settings():
@@ -350,9 +356,9 @@ def format_seconds(seconds: float) -> str:
     parts.append(f"{secs}s")
     return " ".join(parts)
 
-def generate_smil(smil_href: str, xhtml_href: str, audio_href: str, alignments: list[TagAlignment]) -> str:
+def generate_smil_content(smil_href: str, xhtml_href: str, audio_href: str, alignments: list[TagAlignment]) -> str:
     """
-    Generates a SMIL XML string for EPUB 3 Media Overlay.
+    Generates a SMIL XML content for EPUB 3 Media Overlay.
 
     Args:
         smil_href (str): The href of the SMIL file (relative to EPUB root).

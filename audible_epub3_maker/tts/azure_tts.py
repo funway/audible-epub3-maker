@@ -1,7 +1,6 @@
 import logging, re, html
 from pathlib import Path
 from bs4 import BeautifulSoup
-from pydub import AudioSegment
 from rapidfuzz import fuzz
 import azure.cognitiveservices.speech as speechsdk
 
@@ -69,6 +68,7 @@ class AzureTTS(BaseTTS):
         # logger.debug(f"wb_list @{id(word_boundaries)}, wb: {wb}")
         pass
 
+
     def _break_html_into_text_chunks(self, html_text: str) -> list[str]:
         """将 HTML 正文内容切分成多个文本块 (会引入 SSML break 标签)，每个块的大小不超过 max_chars_per_chunk。
 
@@ -90,24 +90,14 @@ class AzureTTS(BaseTTS):
             "p" : "_#BRK1#",
         }
         # 1.1 给 HTML 中指定的标签尾部添加 #BRK 标记 (因为 h1 的文字经常没有句号)
-        html_with_break_mark = html_segmenter.append_suffix_to_tags(html_text, suffix_map=break_map)
+        soup = BeautifulSoup(html_text, BEAUTIFULSOUP_PARSER)
+        html_segmenter.bs_append_suffix_to_tags(soup, suffix_map=break_map)
+        # html_with_break_mark = html_segmenter.append_suffix_to_tags(html_text, suffix_map=break_map)
         # logger.debug(f"HTML with BREAK mark: \n{html_with_break_mark}")
-        
-        soup = BeautifulSoup(html_with_break_mark, BEAUTIFULSOUP_PARSER)
         body_text = soup.body.get_text() if soup.body else soup.get_text()
         
-        # 1.2 处理换行符，对于 TTS 而言，换行符会认为是发音的一个停顿，空格则不会引起停顿。
-        # 而对于 HTML 而言，一个标签文本中的换行符通常是无效的。
-        if settings.newline_mode == "single":
-            cleaned_text = body_text
-        elif settings.newline_mode == "multi":
-            tmp_text = re.sub(r"\n(?:\s*\n)+", "_#NLINE#_", body_text)  # 多个换行 => 标记
-            tmp_text = re.sub(r"\n", " ", tmp_text)                     # 单个换行 => 空格
-            cleaned_text = tmp_text.replace("_#NLINE#_", "\n")          # 多个换行 => 单个换行
-        elif settings.newline_mode == "none":
-            cleaned_text = re.sub(r"\n+", " ", body_text)
-        else:
-            raise ValueError(f"Unsupported newline_mode: {settings.newline_mode}")
+        # 1.2 处理换行符
+        cleaned_text = text_segmenter.normalize_newlines(body_text, settings.newline_mode)
 
         # 1.3 带着 #BRK 标记做分句
         sentences_with_inline_break_mark = text_segmenter.segment_text_by_re(cleaned_text)
@@ -142,6 +132,7 @@ class AzureTTS(BaseTTS):
         # logger.debug(f"Text chunks [{len(text_chunks)}]: {text_chunks}")
         return text_chunks
 
+    
     def _text_to_speech(self, text: str, output_file: Path) -> tuple[bytes, list[WordBoundary]]:
         word_boundaries = []
         speech_config = speechsdk.SpeechConfig(subscription=AZURE_TTS_KEY, region=AZURE_TTS_REGION)
@@ -155,7 +146,9 @@ class AzureTTS(BaseTTS):
             f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" '
             f'xmlns:mstts="http://www.w3.org/2001/mstts" xml:lang="{settings.tts_lang}">\n'
             f'  <voice name="{settings.tts_voice}">\n'
+            f'    <prosody rate="{settings.tts_speed}">\n'
             f'    {text}\n'
+            f'    </prosody>\n'
             f'  </voice>\n'
             f'</speak>'
         )
@@ -173,53 +166,6 @@ class AzureTTS(BaseTTS):
         
         return result.audio_data, word_boundaries
 
-    def _merge_audio_chunks_and_word_boundaries(self, chunks: list[dict]) -> tuple[AudioSegment, list[WordBoundary]]:
-        merged_audio = AudioSegment.empty()
-        merged_wbs = []
-        current_offset = 0.0
-
-        for chunk in chunks:
-            audio_file = chunk["audio_file"]
-            audio_data = chunk["audio_data"]
-            wbs = chunk["wbs"]
-
-            # 1. merge audio
-            audio = AudioSegment.from_file(audio_file, format="wav")
-            merged_audio += audio
-            
-            # 2. merge word boundaries
-            for wb in wbs:
-                adjusted_wb = WordBoundary(
-                    start_ms = wb.start_ms + current_offset,
-                    end_ms = wb.end_ms + current_offset,
-                    text = wb.text,
-                )
-                merged_wbs.append(adjusted_wb)
-            
-            # 3. add current audio offset
-            current_offset += len(audio)
-            logger.debug(f"audio [{audio_file}] duration: {len(audio)}ms")
-            pass
-        
-        logger.debug(f"Merged audio duration (calculated): {current_offset}ms")
-        return merged_audio, merged_wbs
-    
-    def _save_audio(self, audio: AudioSegment, output_file: Path, metadata: dict|None = None):
-        """"""
-        metadata = metadata or {}
-
-        export_format = output_file.suffix.lower().lstrip('.') or "mp3"
-        if export_format not in ["wav", "mp3"]:
-            logger.warning(f"Unsupported output format '{export_format}', falling back to 'mp3'")
-            export_format = "mp3"
-        
-        audio.export(str(output_file), format=export_format, tags=metadata)
-        logger.debug(f"Audio saved to {output_file}")
-
-        # check audio time length
-        final_audio = AudioSegment.from_file(output_file, format=export_format)
-        logger.debug(f"Final audio duration (actual): {len(final_audio)}ms")
-        pass
 
     def html_to_speech(self, html_text: str, output_file: Path, metadata: dict|None = None) -> list[WordBoundary]:
         """
@@ -257,11 +203,11 @@ class AzureTTS(BaseTTS):
             helpers.save_text(merged_texts, text_file)
         
         # 2. tts
-        chunks = []
+        chunk_results = []
         for i, text_chunk in enumerate(text_chunks):
             audio_chunk_file = output_file.parent / f"{output_file.stem}.part{i}.wav"
             audio_chunk, word_boundaries = self._text_to_speech(text_chunk, audio_chunk_file)
-            chunks.append({
+            chunk_results.append({
                 "idx": i,
                 "text": text_chunk,
                 "audio_file": audio_chunk_file,
@@ -270,12 +216,12 @@ class AzureTTS(BaseTTS):
             })
 
         # 3. merge audio and word boundaries
-        merged_audio, merged_wbs = self._merge_audio_chunks_and_word_boundaries(chunks)
+        merged_audio, merged_wbs = self.merge_audios_and_word_boundaries(chunk_results)
         if merged_audio is None or len(merged_audio) == 0:
             raise TTSEmptyAudioError("TTS returned empty or invalid audio data.")
         
         # 4. save merged audio
-        self._save_audio(merged_audio, output_file, metadata)
+        self.save_audio(merged_audio, output_file, metadata)
         
         # 5. save wbs file
         if in_dev():
@@ -283,33 +229,37 @@ class AzureTTS(BaseTTS):
             helpers.save_wbs_as_json(merged_wbs, wbs_file)
         
         # 5. clear temp audio_chunk
-        for chunk in chunks:
+        for chunk in chunk_results:
             chunk["audio_file"].unlink(missing_ok=True)
 
         return merged_wbs
   
 
 def main():
-    # === 输入文本 (SSML with style & break) ===
-    ssml = """
-    <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis"
-        xmlns:mstts="http://www.w3.org/2001/mstts"
-        xml:lang="en-US">
-    <voice name="en-us-avaMultilingualNeural">
-受戒》汪曾祺
-<break time="500ms" />《二○○六年十一月廿七日版》 《好讀書櫃》經典版
- 　　明海出家已經四年了。  　　他是十三歲來的。  　　這個地方的地名有點怪，叫庵趙莊。趙，是因為莊上大都姓趙。叫做莊，可是人家住得很分散，這裡兩三家，那裡兩三家。一出門，遠遠可以看到，走起來得走一會，因為沒有大路，都是彎彎曲曲的田埂。庵，是因為有一個庵。庵叫苦提庵，可是大家叫訛了，叫成荸薺庵。連庵裡的和尚也這樣叫。「寶剎何處？」－－「荸薺庵。」庵本來是住尼姑的。「和尚廟」、「尼姑庵」嘛。可是荸薺庵住的是和尚。也許因為荸薺庵不大，大者為廟，小者為庵。  　　明海在家叫小明子。他是從小就確定要出家的。他的家鄉不叫「出家」，叫「當和尚」。他的家鄉出和尚。就像有的地方出劁豬的，有的地方出織蓆子的，有的地方出箍桶的，有的地方出彈棉花的，有的地方出畫匠，有的地方出婊子，他的家鄉出和尚。人家弟兄多，就派一個出去當和尚。當和尚也要通過關係，也有幫。這地方的和尚有的走得很遠。有到杭州靈隱寺的、上海靜安寺的、鎮江金山寺的、揚州天寧寺的。一般的就在本縣的寺廟。明海家田少，老大、老二、老三，就足夠種的了。他是老四。他七歲那年，他當和尚的舅舅回家，他爹、他娘就和舅舅商議，決定叫他當和尚。他當時在旁邊，覺得這實在是在情在理，沒有理由反對。當和尚有很多好處。一是可以吃現成飯。哪個廟裡都是管飯的。二是可以攢錢。只要學會了放瑜伽焰口，拜梁皇懺，可以按例分到辛苦錢。積攢起來，將來還俗娶親也可以；不想還俗，買幾畝田也可以。當和尚也不容易，一要面如朗月，二要聲如鐘磬，三要聰明記性好。他舅舅給他相了相面，叫他前走幾步，後走幾步，又叫他喊了一聲趕牛打場的號子：「格當了－－」，說是「明子準能當個好和尚，我包了！」要當和尚，得下點本，－－念幾年書。哪有不認字的和尚呢！於是明子就開蒙入學，讀了《三字經》、《百家姓》、《四言雜字》、《幼學瓊林》、《上論、下論》、《上孟、下孟》，每天還寫一張仿。村裡都誇他字寫得好，很黑。  　　舅舅按照約定的日期又回了家，帶了一件他自己穿的和尚領的短衫，叫明子娘改小一點，給明子穿上。明子穿了這件和尚短衫，下身還是在家穿的紫花褲子，赤腳穿了一雙新布鞋，跟他爹、他娘磕了一個頭，就隨舅舅走了。  　　他上學時起了個學名，叫明海。舅舅說，不用改了。於是「明海」就從學名變成了法名。  　　過了一個湖。好大一個湖！穿過一個縣城。縣城真熱鬧：官鹽店，稅務局，肉鋪裡掛著成邊的豬，一個驢子在磨芝麻，滿街都是小磨香油的香味，布店，賣茉莉粉、梳頭油的什麼齋，賣絨花的，賣絲線的，打把式賣膏藥的，吹糖人的，耍蛇的，－－他什麼都想看看。舅舅一勁地推他：「快走！快走！」  　　到了一個河邊，有一隻船在等著他們。船上有一個五十來歲的瘦長瘦長的大伯，船頭蹲著一個跟明子差不多大的女孩子，在剝一個蓮蓬吃。明子和舅舅坐到艙裡，船就開了。明子聽見有人跟他說話，是那個女孩子。  　　「是你要到荸薺庵當和尚嗎？」  　　明子點點頭。  　　「當和尚要燒戒疤嘔！你不怕？」  　　明子不知道怎麼回答，就含含糊糊地搖了搖頭。  　　「你叫什麼？」  　　「明海。」  　　「在家的時候？」  　　「叫明子。」  　　「明子！我叫小英子！我們是鄰居。我家挨著荸薺庵。－－給你！」  　　小英子把吃剩的半個蓮蓬扔給明海，小明子就剝開蓮蓬殼，一顆一顆吃起來。  　　大伯一槳一槳地划著，只聽見船槳撥水的聲音：「嘩－－許！嘩－－許！」  　　－－  　　荸薺庵的地勢很好，在一片高地上。這一帶就數這片地勢高，當初建庵的人很會選地方。門前是一條河。門外是一片很大的打穀場。三面都是高大的柳樹。山門裡是一個穿堂。迎門供著彌勒佛。不知是哪一位名士撰寫了一副對聯：  　　大肚能容　容天下難容之事 　　開顏一笑　笑世間可笑之人  　　彌勒佛背後，是韋馱。過穿堂，是一個不小的天井，種著兩棵白果樹。天井兩邊各有三間廂房。走過天井，便是大殿，供著三世佛。佛像連龕才四尺來高。大殿東邊是方丈，西邊是庫房。大殿東側，有一個小小的六角門，白門綠字，刻著一副對聯：  　　一花一世界  　　三藐三菩提  　　進門有一個狹長的天井，幾塊假山石，幾盆花，有三間小房。  　　小和尚的日子清閒得很。一早起來，開山門，掃地。庵裡的地鋪的都是籮底方磚，好掃得很，給彌勒佛、韋馱燒一炷香，正殿的三世佛面前也燒一炷香、磕三個頭、念三聲「南無阿彌陀佛」，敲三聲磬。這庵裡的和尚不興做什麼早課、晚課，明子這三聲磬就全都代替了。然後，挑水，餵豬。然後，等當家和尚，即明子的舅舅起來，教他唸經。  　　教唸經也跟教書一樣，師父面前一本經，徒弟面前一本經，師父唱一句，徒弟跟著唱一句。是唱哎。舅舅一邊唱，一邊還用手在桌上拍板。一板一眼，拍得很響，就跟教唱戲一樣。是跟教唱戲一樣，完全一樣哎。連用的名詞都一樣。舅舅說，唸經：一要板眼準，二要合工尺。說：當一個好和尚，得有條好嗓子。說：民國二十年鬧大水，運河倒了堤，最後在清水潭合龍，因為大水淹死的人很多，放了一台大焰口，十三大師－－十三個正座和尚，各大廟的方丈都來了，下面的和尚上百。誰當這個首座？推來推去，還是石橋－－善因寺的方丈！他往上一坐，就跟地藏王菩薩一樣，這就不用說了；那一聲「開香贊」，圍看的上千人立時鴉雀無聲。說：嗓子要練，夏練三伏，冬練三九，要練丹田氣！說：要吃得苦中苦，方為人上人！說：和尚裡也有狀元、榜眼、探花！要用心，不要貪玩！舅舅這一番大法要說得明海和尚實在是五體投地，於是就一板一眼地跟著舅舅唱起來：  　　「爐香乍爇－－」  　　「爐香乍爇－－」  　　「法界蒙薰－－」  　　「法界蒙薰－－」  　　「諸佛現金身－－」  　　「諸佛現金身－－」  　　－－  　　等明海學完了早經，－－他晚上臨睡前還要學一段，叫做晚經，－－荸薺庵的師父們就都陸續起床了。  　　這庵裡人口簡單，一共六個人。連明海在內，五個和尚。有一個老和尚，六十幾了，是舅舅的師叔，法名普照，但是知道的人很少，因為很少人叫他法名，都稱之為老和尚或老師父，明海叫他師爺爺。這是個很枯寂的人，一天關在房裡，就是那「一花一世界」裡。也看不見他念佛，只是那麼一聲不響地坐著。他是吃齋的，過年時除外。  　　下面就是師兄弟三個，仁字排行：仁山、仁海、仁渡。庵裡庵外，有的稱他們為大師父、二師父；有的稱之為山師父、海師父。只有仁渡，沒有叫他「渡師父」的，因為聽起來不像話，大都直呼之為仁渡。他也只配如此，因為他還年輕，才二十多歲。仁山，即明子的舅舅，是當家的。不叫「方丈」，也不叫「住持」，卻叫「當家的」，是很有道理的，因為他確確實實幹的是當家的職務。他屋裡擺的是一張帳桌，桌子上放的是帳簿和算盤。帳簿共有三本。一本是經帳，一本是租帳，一本是債帳。和尚要做法事，做法事要收錢，－－要不，當和尚幹什麼？常做的法事是放焰口。正規的焰口是十個人。一個正座，一個敲鼓的，兩邊一邊四個。人少了，八個，一邊三個，也湊合了。荸薺庵只有四個和尚，要放整焰口就得和別的廟裡合夥。這樣的時候也有過，通常只是放半台焰口。一個正座，一個敲鼓，另外一邊一個。一來找別的廟裡合夥費事；二來這一帶放得起整焰口的人家也不多。有的時候，誰家死了人，就只請兩個，
-    </voice>
-    </speak>
-    """
-    plain_text = "hello, world. My name is funway wang."
+    text = '''
+    The Old Man and the Sea
+    He was an old man who fished alone in a skiff in the Gulf Stream and he had gone eighty–four days now without taking a fish.  In the first forty days a boy had been with him. 
+    '''
+    tts_speed = 1.2
+    ssml = (
+            f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" '
+            f'xmlns:mstts="http://www.w3.org/2001/mstts" xml:lang="{settings.tts_lang}">\n'
+            f'  <voice name="{settings.tts_voice}">\n'
+            f'    <prosody rate="{tts_speed}">\n'
+            f'    {text}\n'
+            f'    </prosody>\n'
+            f'  </voice>\n'
+            f'</speak>'
+        )
+    
+    logger.debug(f"ssml:\n{ssml}")
 
     # === 创建 Speech Synthesizer with Word Boundary ===
     speech_config = speechsdk.SpeechConfig(subscription=AZURE_TTS_KEY, region=AZURE_TTS_REGION)
     # logger.info(f"output format: {speech_config.speech_synthesis_output_format_string}, {speech_config.output_format}")
     # speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3)
     # logger.info(f"output format: {speech_config.speech_synthesis_output_format_string}, {speech_config.output_format}")
-    audio_config = speechsdk.audio.AudioOutputConfig(filename=str(Path("output.wav")))
+    audio_config = speechsdk.audio.AudioOutputConfig(filename=str(DEV_OUTPUT / "output.wav"))
     synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
 
     # === 创建事件回调函数 ===
@@ -332,7 +282,6 @@ def main():
     synthesizer.synthesis_word_boundary.connect(word_boundary_cb)
     synthesizer.bookmark_reached.connect(on_bookmark)
 
-
     # === 开始合成 ===
     result = synthesizer.speak_ssml_async(ssml).get()
     # result = synthesizer.speak_text_async(plain_text).get()
@@ -345,27 +294,6 @@ def main():
         logger.error(f"Speech synthesis failed: {result.reason}")
         logger.error(f"Error details: {result.cancellation_details.error_details if result.cancellation_details else 'No error details'}")
 
-    # === 保存 Word Boundaries 为简单 SMIL ===
-    smil_content = """<smil xmlns="http://www.w3.org/ns/SMIL" version="3.0">
-    <body>
-        <seq>
-    """
-
-    for i, word in enumerate(word_boundaries):
-        smil_content += f'      <par>\n'
-        smil_content += f'        <text src="animal_farm.xhtml#word{i}" />\n'
-        smil_content += f'        <audio src="output.wav" clipBegin="{word["offset"]/1000:.3f}s" />\n'
-        smil_content += f'      </par>\n'
-
-    smil_content += """    </seq>
-    </body>
-    </smil>
-    """
-
-    with open("output.smil", "w") as f:
-        f.write(smil_content)
-
-    logger.debug("SMIL file written: output.smil")
     pass
 
 def test():
@@ -421,36 +349,35 @@ def test():
 # <p><span data-ae-x="1" id="ae00053">A funny prickling on the back of his neck had made Harry feel he was being watched,</span><span data-ae-x="1" id="ae00054"> but the street appeared to be deserted,</span><span data-ae-x="1" id="ae00055"> and no lights shone from any of the large square houses.</span></p>
 # </body></html>
 # '''
-    html = '''
-<?xml version='1.0' encoding='utf-8'?>
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
-    <head>
-        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
-        <meta name="calibre:cover" content="true"/>
-        <title>Cover</title>
-        <style type="text/css" title="override_css">
-            @page {padding: 0pt; margin:0pt}
-            body { text-align: center; padding:0pt; margin: 0pt; }
-        </style>
-    </head>
-    <body>
-        <div>
-            <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="100%" height="100%" viewBox="0 0 250 402" preserveAspectRatio="none">
-                <p><image width="250" height="402" xlink:href="cover.jpeg"/></p>
-            </svg>
-        </div>
-    </body>
-</html>
-
-'''
+#     html = '''
+# <?xml version='1.0' encoding='utf-8'?>
+# <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+#     <head>
+#         <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+#         <meta name="calibre:cover" content="true"/>
+#         <title>Cover</title>
+#         <style type="text/css" title="override_css">
+#             @page {padding: 0pt; margin:0pt}
+#             body { text-align: center; padding:0pt; margin: 0pt; }
+#         </style>
+#     </head>
+#     <body>
+#         <div>
+#             <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="100%" height="100%" viewBox="0 0 250 402" preserveAspectRatio="none">
+#                 <p><image width="250" height="402" xlink:href="cover.jpeg"/></p>
+#             </svg>
+#         </div>
+#     </body>
+# </html>
+# '''
 
     tts = AzureTTS()
 
-    wb_list = tts.html_to_speech(html, "output.mp3", metadata={})
+    wb_list = tts.html_to_speech(html, DEV_OUTPUT / "output.mp3", metadata={})
     #   logger.debug(f"wb_list: {wb_list}")
     #   aligns = force_alignment(html, "span", wb_list)
     
-    wbs_file = "outpu.wbs"
+    wbs_file = DEV_OUTPUT / "output.wbs"
     helpers.save_wbs_as_json(wb_list, wbs_file)
 
     soup = BeautifulSoup(html, BEAUTIFULSOUP_PARSER)
@@ -460,10 +387,11 @@ def test():
     logger.debug(f"segments: {idx_segments}")
     alignments = helpers.force_alignment(idx_segments, wb_list)
     # logger.debug(alignments)
-    print(helpers.generate_smil("text/01.smil", "text/ch01.xhtml", "audio/aud_01.mp3", alignments))
+    print(helpers.generate_smil_content("text/01.smil", "text/ch01.xhtml", "audio/aud_01.mp3", alignments))
     pass
 
 
 if __name__ == "__main__":
+    from audible_epub3_maker.utils.constants import DEV_OUTPUT
     main()
     # test()

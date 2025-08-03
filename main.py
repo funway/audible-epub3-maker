@@ -63,9 +63,16 @@ def parse_args():
 
     parser.add_argument(
         "--tts_chunk_len",
-        type = int,
-        default = 0,
-        help = "Maximum number of characters per TTS chunk (default: auto by language)"
+        type=int,
+        default=0,
+        help="Maximum number of characters per TTS chunk (default: auto by language)"
+    )
+
+    parser.add_argument(
+        "--tts_speed",
+        type=float,
+        default=1.0,
+        help="Playback speed for TTS synthesis (e.g., 1.0 = normal speed, 0.8 = slower, 1.2 = faster). Default is 1.0."
     )
 
     parser.add_argument(

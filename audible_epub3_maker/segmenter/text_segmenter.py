@@ -75,6 +75,30 @@ def restore_non_terminal_dot(text: str, replacement: str = "_DOT_") -> str:
     """
     return text.replace(replacement, '.')
 
+def normalize_newlines(text: str, mode: str) -> str:
+    """
+    Normalize newlines in a text string according to the specified mode:
+    
+    处理换行符，对于 TTS 而言，换行符会认为是发音的一个停顿，空格则不会引起停顿。
+    而对于 HTML 而言，在标签内部文本中的换行符通常是被忽略的 (除非是 pre 标签)。
+
+    - 'single': preserve all single newlines
+    - 'multi': collapse multiple newlines into one, single newlines become space
+    - 'none': remove all newlines
+
+    Returns the cleaned text.
+    """
+    if mode == "single":
+        return text
+    elif mode == "multi":
+        tmp = re.sub(r"\n(?:\s*\n)+", "_#NLINE#_", text)    # 多个换行 => 标记
+        tmp = re.sub(r"\n", " ", tmp)                       # 单个换行 => 空格
+        return tmp.replace("_#NLINE#_", "\n")               # 多个换行 => 单个换行
+    elif mode == "none":
+        return re.sub(r"\n+", " ", text)
+    else:
+        raise ValueError(f"Unsupported newline_mode: {mode}")
+    
 
 def segment_text_by_re(text: str) -> list:
     """Segments text into sentences based on regular expressions.

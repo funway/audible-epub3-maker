@@ -92,8 +92,7 @@ def _bs_append_suffix_inside(tag: Tag, suffix: str):
     # fallback
     tag.append(suffix)
 
-def append_suffix_to_tags(html_text: str, suffix_map: dict[str, str], inside: bool = False) -> str:
-    soup = BeautifulSoup(html_text, BEAUTIFULSOUP_PARSER)
+def bs_append_suffix_to_tags(soup: BeautifulSoup, suffix_map: dict[str, str], inside: bool = False):
     for tag_name, suffix in suffix_map.items():
         tags = soup.find_all(tag_name)
         for tag in tags:
@@ -105,6 +104,11 @@ def append_suffix_to_tags(html_text: str, suffix_map: dict[str, str], inside: bo
                 _bs_append_suffix_inside(tag, suffix)
             else:
                 tag.insert_after(suffix)
+    pass 
+
+def append_suffix_to_tags(html_text: str, suffix_map: dict[str, str], inside: bool = False) -> str:
+    soup = BeautifulSoup(html_text, BEAUTIFULSOUP_PARSER)
+    bs_append_suffix_to_tags(soup, suffix_map, inside)
     return str(soup)
 
 # TODO: 先分句，得到 text_segments, 然后再去原 html 中匹配每个分句进行切分。

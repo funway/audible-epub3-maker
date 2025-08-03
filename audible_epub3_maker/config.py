@@ -24,6 +24,7 @@ class UserSettings:
         self.tts_lang: str = "en-US"
         self.tts_voice: str = "en-US-AvaMultilingualNeural"
         self.tts_chunk_len: int = -1  # Max chars length per chunk for a TTS request.
+        self.tts_speed: float = 1.0
 
         # Force alignment similarity threshold
         self.align_threshold: float = 95.0
