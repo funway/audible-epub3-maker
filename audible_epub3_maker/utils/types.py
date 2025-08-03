@@ -77,3 +77,4 @@ class TaskErrorResult(object):
 
 class TTSEmptyContentError(ValueError): pass
 class TTSEmptyAudioError(ValueError): pass
+class NoWordBoundariesError(RuntimeError): pass

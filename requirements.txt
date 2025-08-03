@@ -1,10 +1,16 @@
 python-dotenv
 pytest
 pytest-html
-ebooklib
 beautifulsoup4
-azure-cognitiveservices-speech
+requests
 pydub
 audioop-lts; python_version >= "3.13"
 rapidfuzz
-requests
+
+# Azure TTS
+azure-cognitiveservices-speech
+
+# Kokoro TTS
+kokoro>=0.9.4
+soundfile
+misaki[zh]  # should be removed

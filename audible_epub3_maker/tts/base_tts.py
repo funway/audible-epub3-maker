@@ -1,4 +1,4 @@
-import logging
+import logging, io
 from pathlib import Path
 from pydub import AudioSegment
 
@@ -19,14 +19,19 @@ class BaseTTS(object):
         raise NotImplementedError
     
     @classmethod
-    def merge_audios_and_word_boundaries(cls, chunk_results: list[dict]) -> tuple[AudioSegment, list[WordBoundary]]:
+    def merge_audios_and_word_boundaries(cls, 
+                                         chunk_results: list[dict],
+                                         key: str = "audio_file"
+                                         ) -> tuple[AudioSegment, list[WordBoundary]]:
         """
         Merges multiple audio chunks and their corresponding word boundaries into a single audio stream
         and a unified word boundary list with adjusted timestamps.
 
-        Each item in `chunk_results` must be a dict with:
-            - "audio_file": Path to a WAV audio file
-            - "wbs": List[WordBoundary] corresponding to the audio
+        Args:
+            chunk_results: List of dicts with:
+                - `key`: key_name poins to the WAV data (e.g., 'audio_file' or 'audio_data')
+                - 'wbs': list of WordBoundary
+            key: Key_name in each chunk dict pointing to WAV data (file Path or BytesIO)
 
         Returns:
             - merged_audio: Combined AudioSegment
@@ -36,11 +41,12 @@ class BaseTTS(object):
         merged_wbs = []
         current_offset = 0.0
 
-        for chunk in chunk_results:
-            audio_file = chunk["audio_file"]
+        for idx, chunk in enumerate(chunk_results):
+            audio_file = chunk[key]
             wbs: list[WordBoundary] = chunk["wbs"]
 
             # 1. Merge audio
+            # AudioSegment.from_file 支持读取文件，也支持读取 file-like 对象 (BytesIO)
             audio = AudioSegment.from_file(audio_file, format="wav")
             merged_audio += audio
             
@@ -55,28 +61,30 @@ class BaseTTS(object):
             
             # 3. Update offset
             current_offset += len(audio)
-            logger.debug(f"Audio [{audio_file}] duration: {len(audio)}ms")
+            logger.debug(f"Audio [{idx}] {audio_file}: duration = {len(audio)}ms")
         
         logger.debug(f"Total merged audio duration (calculated): {current_offset}ms")
         return merged_audio, merged_wbs
     
 
     @classmethod
-    def merge_audios(cls, audio_files: list[Path]) -> AudioSegment:
+    def merge_audios(cls, audio_files: list[Path | io.BytesIO]) -> AudioSegment:
         """
         Merges a list of audio files (WAV format) into a single AudioSegment.
 
         Args:
-            audio_files: List of Path objects pointing to audio files in WAV format.
+            audio_files: List of audio inputs, each being either:
+                      - a Path to a WAV file
+                      - or a BytesIO object containing WAV data
 
         Returns:
             AudioSegment: The concatenated audio segment.
         """
         merged_audio = AudioSegment.empty()
-        for audio_file in audio_files:
+        for idx, audio_file in enumerate(audio_files):
             audio = AudioSegment.from_file(audio_file, format="wav")
             merged_audio += audio
-            logger.debug(f"Merged audio file: {audio_file}, duration: {len(audio)}ms")
+            logger.debug(f"Audio [{idx}] {audio_file}: duration = {len(audio)}ms")
 
         logger.debug(f"Total merged audio duration: {len(merged_audio)}ms")
         return merged_audio

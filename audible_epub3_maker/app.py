@@ -102,8 +102,8 @@ class App(object):
                     book.add_item(smil_item)
 
                     # 3. Update the corresponding chapter item
-                    chapter.attrs["media-overlay"] = smil_id
-                    chapter.set_text(task_result.taged_html)
+                    chapter.attrs["media-overlay"] = smil_id  # Add overlay property 
+                    chapter.set_text(task_result.taged_html)  # Modify HTML text
                 else:
                     logger.error(f"❌ [Task {result[1].payload.task_id}] failed. {result[1]}")
             

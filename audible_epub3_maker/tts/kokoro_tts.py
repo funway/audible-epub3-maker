@@ -8,6 +8,7 @@ from audible_epub3_maker.utils.logging_setup import setup_logging
 from audible_epub3_maker.tts.base_tts import BaseTTS
 from audible_epub3_maker.config import settings, in_dev
 from audible_epub3_maker.utils import helpers
+from audible_epub3_maker.utils.constants import BEAUTIFULSOUP_PARSER
 from audible_epub3_maker.utils.types import WordBoundary, TTSEmptyAudioError, TTSEmptyContentError
 from audible_epub3_maker.segmenter import html_segmenter, text_segmenter
 
@@ -26,7 +27,7 @@ class KokoroTTS(BaseTTS):
         metadata.update({"artist": f"Kokoro TTS - {settings.tts_voice}", 
                          "language": f"{settings.tts_lang}",})
         
-        soup = BeautifulSoup(html_text)
+        soup = BeautifulSoup(html_text, BEAUTIFULSOUP_PARSER)
         # 1. 替换在 HTML 中 h 标签后追加 BRK 标记
         break_map = {
             "h1": "_#BRK#",
@@ -68,9 +69,11 @@ class KokoroTTS(BaseTTS):
             logger.debug(f"  audio length: {len(result.audio)}")
             logger.debug(f"  tokens length: {len(tokens)}")
 
-            audio_chunk_file = output_file.parent / f"{output_file.stem}.part{idx}.wav"
+            # audio_chunk_file = output_file.parent / f"{output_file.stem}.part{idx}.wav"
             if result.audio is not None:
-                sf.write(audio_chunk_file, result.audio, 24000)
+                audio_data = io.BytesIO()
+                sf.write(audio_data, result.audio, 24000, format="WAV")
+                audio_data.seek(0)
 
             wbs = []            
             for token in tokens:
@@ -87,13 +90,13 @@ class KokoroTTS(BaseTTS):
             chunk_results.append({
                 "idx": idx,
                 "text": result.graphemes,
-                "audio_file": audio_chunk_file,
-                "audio_data": result.audio,
+                # "audio_file": audio_chunk_file,
+                "audio_data": audio_data,
                 "wbs": wbs,
             })
         
         # 3. merge audio and word boundaries
-        merged_audio, merged_wbs = self.merge_audios_and_word_boundaries(chunk_results)
+        merged_audio, merged_wbs = self.merge_audios_and_word_boundaries(chunk_results, key="audio_data")
         if merged_audio is None or len(merged_audio) == 0:
             raise TTSEmptyAudioError("TTS returned empty or invalid audio data.")
 
@@ -105,10 +108,6 @@ class KokoroTTS(BaseTTS):
             wbs_file = output_file.with_suffix(".wbs.txt")
             helpers.save_wbs_as_json(merged_wbs, wbs_file)
         
-        # 5. clear temp audio_chunk
-        for chunk in chunk_results:
-            chunk["audio_file"].unlink(missing_ok=True)
-
         return merged_wbs
 
 

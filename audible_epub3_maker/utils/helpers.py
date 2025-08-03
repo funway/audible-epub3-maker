@@ -33,7 +33,7 @@ def save_wbs_as_json(word_boundaries: list[WordBoundary], output_file: Path):
 def align_sentences_and_wordboundaries(sentences: list[str], 
                                        word_boundaries: list[WordBoundary], 
                                        threshold: float = 95.0, 
-                                       dev_output_file: Path | None = None) -> list[tuple[int, int]]:
+                                       aligns_output_file: Path | None = None) -> list[tuple[int, int]]:
     """
     Aligns each sentence in `sentences` to a best-matching span of word boundaries using fuzzy string matching.
 
@@ -48,6 +48,7 @@ def align_sentences_and_wordboundaries(sentences: list[str],
         sentences (list[str]): A list of segmented sentences in text form.
         word_boundaries (list[WordBoundary]): A list of word boundary objects, assumed to be in correct order.
         threshold (float): Minimum fuzzy match score (0-100) required to accept a match. Default is 95.0.
+        aligns_output_file (Path | None): Path to save force alignment debug output (used only in development).
 
     Returns:
         list[tuple[int, int]]: A list of `(start_index, end_index)` tuples corresponding to the indices in 
@@ -158,18 +159,17 @@ def align_sentences_and_wordboundaries(sentences: list[str],
                           f"  best_score: {best_score:.3f}, match: {best_match}, words: [{best_match_words}]")
         logger.debug(dev_output[-1])
 
-        if in_dev():
-            # save alignments data in development env.
-            dev_output.append(f"\n\n📊 Total sentences: {len(sentences)}, Matched sentences: {matched_counter}, Word boundaries: {len(word_boundaries)}")
-            dev_output_file = dev_output_file or Path(DEV_OUTPUT / f"aligns_p{os.getpid()}.txt")
-            dev_output_file.write_text("\n".join(dev_output))
+    if in_dev() and aligns_output_file:
+        # save alignments data in development env.
+        dev_output.append(f"\n📊 Total sentences: {len(sentences)}, Matched sentences: {matched_counter}, Word boundaries: {len(word_boundaries)}")
+        aligns_output_file.write_text("\n".join(dev_output))
 
     return result
 
 def force_alignment(taged_sentences: list[tuple[str, str]], 
                     word_boundaries: list[WordBoundary], 
                     threshold: float = 95.0,
-                    dev_output_file: Path | None = None) -> list[TagAlignment]:
+                    aligns_output_file: Path | None = None) -> list[TagAlignment]:
     """
     Generate a list of TagAlignment objects for EPUB Media Overlay (SMIL) playback.
 
@@ -183,9 +183,13 @@ def force_alignment(taged_sentences: list[tuple[str, str]],
         taged_sentences (list[(tag_id, tag_text)]): A list of (tag_id, tag_text) in tuple form.
         word_boundaries (list[WordBoundary]): A list of word boundary objects, assumed to be in correct order.
         threshold (float): Minimum fuzzy match score (0-100) required to accept a match. Default is 95.0.
+        aligns_output_file (Path | None): Path to save force alignment debug output (used only in development).
     """
     sentences = [idx_sent[1] for idx_sent in taged_sentences]
-    raw_aligns = align_sentences_and_wordboundaries(sentences, word_boundaries, threshold, dev_output_file)
+    raw_aligns = align_sentences_and_wordboundaries(sentences, 
+                                                    word_boundaries, 
+                                                    threshold, 
+                                                    aligns_output_file.with_suffix(".raw.txt") if aligns_output_file else None)
     alignments: list[TagAlignment] = []
     
     unmatched_counter = 0
@@ -239,6 +243,20 @@ def force_alignment(taged_sentences: list[tuple[str, str]],
         f"[FA] Matched alignments: {match_counter}/{total_counter} ({match_counter / total_counter:.1%}), "
         f"Interpolated alignments: {unmatched_counter}/{total_counter} ({unmatched_counter / total_counter:.1%})"
     )
+
+    # save force alignment info
+    if in_dev() and aligns_output_file:
+        align_map: dict[str, TagAlignment] = {align.tag_id: align for align in alignments}
+        
+        with aligns_output_file.open("w", encoding="utf-8") as f:
+            for idx, (tag_id, sentence) in enumerate(taged_sentences):
+                align = align_map.get(tag_id)
+                if align:
+                    f.write(f"sentence [{idx}]: {align} [{sentence}]\n")
+                else:
+                    f.write(f"sentenct [{idx}]: <NO ALIGN FOUND> [{sentence}]")
+            f.write(f"\n📊 {len(sentences)} sentences, {len(alignments)} alignments, {match_counter} matched, {unmatched_counter} interpolated.")
+        pass
 
     return alignments
 
@@ -335,6 +353,7 @@ def confirm_or_exit(msg: str):
         print("Aborted by user.")
         sys.exit(1)
 
+
 def format_smil_time(ms: float) -> str:
     total_seconds = int(ms // 1000)
     milliseconds = int(ms % 1000)
@@ -342,6 +361,7 @@ def format_smil_time(ms: float) -> str:
     minutes = (total_seconds % 3600) // 60
     seconds = total_seconds % 60
     return f"{hours}:{minutes:02}:{seconds:02}.{milliseconds:03}"
+
 
 def format_seconds(seconds: float) -> str:
     seconds = int(round(seconds))
@@ -355,6 +375,7 @@ def format_seconds(seconds: float) -> str:
         parts.append(f"{minutes}m")
     parts.append(f"{secs}s")
     return " ".join(parts)
+
 
 def generate_smil_content(smil_href: str, xhtml_href: str, audio_href: str, alignments: list[TagAlignment]) -> str:
     """

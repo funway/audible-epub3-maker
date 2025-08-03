@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 
 from audible_epub3_maker.config import settings, in_dev
 from audible_epub3_maker.utils import logging_setup, helpers
-from audible_epub3_maker.utils.types import TaskPayload, TaskResult, TaskErrorResult
+from audible_epub3_maker.utils.types import TaskPayload, TaskResult, TaskErrorResult, NoWordBoundariesError
 from audible_epub3_maker.utils.constants import BEAUTIFULSOUP_PARSER, SEG_MARK_ATTR, SEG_TAG
 from audible_epub3_maker.tts import create_tts_engine
 from audible_epub3_maker.segmenter.html_segmenter import html_segment_and_wrap
@@ -44,6 +44,9 @@ def task_fn(payload: TaskPayload):
     tts = create_tts_engine(settings.tts_engine)
     wb_list = tts.html_to_speech(original_html, audio_output_file)
     logger.info(f"[Task {payload.task_id}] 🔈 Generated audio: {audio_output_file}, Size: {helpers.format_bytes(audio_output_file.stat().st_size)}")
+
+    if not wb_list:
+        raise NoWordBoundariesError("The TTS engine did not return any word boundaries. It may not support this feature.")
 
     # 2. Parse HTML and segment by new tag.
     segmented_html = html_segment_and_wrap(original_html)
