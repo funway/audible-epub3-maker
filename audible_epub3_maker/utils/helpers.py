@@ -294,8 +294,21 @@ def get_langs_voices_azure(subscription_key: str, region: str) -> dict[str, list
 
 
 def get_langs_voices_kokoro():
-    pass
+    langs_voices = {
+        'a': [
+            "af_heart", "af_alloy", "af_aoede", "af_bella", "af_jessica",
+            "af_kore", "af_nicole", "af_nova", "af_river", "af_sarah", "af_sky",
+            "am_adam", "am_echo", "am_eric", "am_fenrir", "am_liam",
+            "am_michael", "am_onyx", "am_puck", "am_santa"
+        ],
 
+        'b': [
+            "bf_alice", "bf_emma", "bf_isabella", "bf_lily",
+            "bm_daniel", "bm_fable", "bm_george", "bm_lewis"
+        ]
+    }
+    # Kokoro doesn't support word boundaries for non-English languages.
+    return langs_voices
 
 def validate_tts_settings():
     if "azure" == settings.tts_engine:
@@ -306,19 +319,38 @@ def validate_tts_settings():
         }
         # 检查语言是否受支持
         if settings.tts_lang.lower() not in (k.lower() for k in langs_voices_lowers):
-            logger.debug(f"TTS language '{settings.tts_lang}' not supported by Azure TTS.")
+            logger.warning(f"TTS language '{settings.tts_lang}' not supported by Azure TTS.")
             raise ValueError(f"Azure TTS does not support language: {settings.tts_lang}")
 
         # 检查声音是否在该语言中受支持
         if settings.tts_voice.lower() not in langs_voices_lowers[settings.tts_lang.lower()]:
-            logger.debug(f"TTS voice '{settings.tts_voice}' not supported for language '{settings.tts_lang}' in Azure TTS.")
+            logger.warning(f"TTS voice '{settings.tts_voice}' not supported for language '{settings.tts_lang}' in Azure TTS.")
             raise ValueError(
                 f"Azure TTS does not support voice '{settings.tts_voice}' for language '{settings.tts_lang}'"
             )
 
     elif "kokoro" == settings.tts_engine:
-        # raise NotImplementedError()
-        pass
+        langs_voices = get_langs_voices_kokoro()
+        # langs_voices_lowers = {
+        #     lang.lower(): [v.lower() for v in voices]
+        #     for lang, voices in langs_voices.items()
+        # }
+
+        # lang = settings.tts_lang.lower()
+        # voice = settings.tts_voice.lower()
+
+        # if lang not in langs_voices_lowers:
+        #     raise ValueError(
+        #         f"Kokoro TTS may not support language '{settings.tts_lang}', "
+        #         f"or it does not support word boundaries (token timestamp) for that language."
+        #     )
+
+        # if voice not in langs_voices_lowers[lang]:
+        #     raise ValueError(
+        #         f"Kokoro TTS does not support voice '{settings.tts_voice}' for language '{settings.tts_lang}'"
+        #     )
+    else:
+        raise ValueError(f"Unsupported TTS engine: {settings.tts_engine}")
     
 
 def validate_settings():

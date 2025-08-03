@@ -1,6 +1,6 @@
 import logging, time
 from pathlib import Path
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import Queue, current_process
 
 from audible_epub3_maker.config import settings
@@ -37,7 +37,7 @@ class App(object):
             helpers.confirm_or_exit(msg)
 
         chapters = book.get_chapters()
-        task_payloads = []
+        task_payloads: list[TaskPayload] = []
         for idx, chapter in enumerate(chapters):
             # logger.debug(f"chatper [{idx}/{len(chapters)}]: {chapter.id}, {chapter.href}")
             # segmented_html = html_segment_and_wrap(chapter.get_text())
@@ -66,14 +66,25 @@ class App(object):
                                            logging_setup.get_log_queue(), 
                                            )
                                  ) as executor:
-            # executor.map returns a lazy iterator
-            results = executor.map(task_fn_wrap, task_payloads)
+            # # executor.map returns a lazy iterator
+            # results = executor.map(task_fn_wrap, task_payloads)
+            future_to_task_id = {}
+            futures = []
+
+            for payload in task_payloads:
+                future = executor.submit(task_fn_wrap, payload)
+                futures.append(future)
+                future_to_task_id[future] = payload.task_id
             
-            # Blocks main thread of MainProcess when fetching results, 
-            # waiting for the corresponding subprocess to finish.
-            for result in results:
-                if result[0]:
-                    task_result = result[1]
+            for future in as_completed(futures):
+                try:
+                    success, task_result = future.result()
+                except Exception as e:
+                    task_id = future_to_task_id[future]
+                    logger.exception(f"⛔ Unexpected executor-level error for task {task_id}: {e}")
+                    continue
+
+                if success:
                     logger.info(f"✅ [Task {task_result.task_id}] complete. {task_result}")
                     
                     # 0. Get the corresponding chapter item
@@ -105,7 +116,7 @@ class App(object):
                     chapter.attrs["media-overlay"] = smil_id  # Add overlay property 
                     chapter.set_text(task_result.taged_html)  # Modify HTML text
                 else:
-                    logger.error(f"❌ [Task {result[1].payload.task_id}] failed. {result[1]}")
+                    logger.error(f"❌ [Task {task_result.payload.task_id}] failed. {task_result}")
             
         # Save EPUB
         epub_output_path = settings.output_dir / settings.input_file.name
