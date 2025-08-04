@@ -62,13 +62,6 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--tts_chunk_len",
-        type=int,
-        default=0,
-        help="Maximum number of characters per TTS chunk (default: auto by language)"
-    )
-
-    parser.add_argument(
         "--tts_speed",
         type=float,
         default=1.0,
@@ -76,17 +69,10 @@ def parse_args():
     )
 
     parser.add_argument(
-        "-f", "--force",
-        action="store_true",
-        default=False,
-        help="Force all prompts to be accepted (non-interactive mode)"
-    )
-
-    parser.add_argument(
-        "-m", "--max_workers",
+        "--tts_chunk_len",
         type=int,
-        default=3,
-        help="Max count of multi-processing workers for audio and alignment generating (default: 3)"
+        default=0,
+        help="Maximum number of characters per TTS chunk (default: auto by language)"
     )
 
     parser.add_argument(
@@ -109,6 +95,27 @@ def parse_args():
             "Threshold for force alignment fuzzy matching (0–100).\n"
             "Higher value means stricter alignment. Default: 95.0"
         )
+    )
+
+    parser.add_argument(
+        "-m", "--max_workers",
+        type=int,
+        default=3,
+        help="Max count of multi-processing workers for audio and alignment generating (default: 3)"
+    )
+
+    parser.add_argument(
+        "-f", "--force",
+        action="store_true",
+        default=False,
+        help="Force all prompts to be accepted (non-interactive mode)"
+    )
+
+    parser.add_argument(
+        "--cleanup",
+        action="store_true",
+        default=False,
+        help="Remove temporary files after generation."
     )
 
     return parser.parse_args()

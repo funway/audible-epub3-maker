@@ -6,7 +6,6 @@ from rapidfuzz import fuzz
 from dataclasses import asdict
 
 from audible_epub3_maker.config import settings, AZURE_TTS_KEY, AZURE_TTS_REGION, in_dev
-from audible_epub3_maker.utils import logging_setup
 from audible_epub3_maker.utils.types import WordBoundary, TagAlignment
 from audible_epub3_maker.utils.constants import DEV_OUTPUT
 

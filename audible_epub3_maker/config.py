@@ -4,12 +4,16 @@ from dotenv import load_dotenv
 
 ## Configuration that can be modified by users via environment variables ##
 load_dotenv(override=False)  # Load the .env file into system env if it exists
-AZURE_TTS_KEY = os.environ.get("AZURE_TTS_KEY", "YOUR_AZURE_SPEECH_KEY")
-AZURE_TTS_REGION = os.environ.get("AZURE_TTS_REGION", "YOUR_REGION")
+
+AZURE_TTS_KEY = os.environ.get("AZURE_TTS_KEY", "")
+AZURE_TTS_REGION = os.environ.get("AZURE_TTS_REGION", "")
+
 AUDIBLE_EPUB3_MAKER_ENV = os.environ.get("AUDIBLE_EPUB3_MAKER_ENV", "production")
+
 
 def in_dev() -> bool:
     return AUDIBLE_EPUB3_MAKER_ENV.lower() in {"dev", "development"}
+
 
 ## User-specified command-line options ##
 class UserSettings:
@@ -17,7 +21,9 @@ class UserSettings:
         self.input_file: Path | None = None
         self.output_dir: Path | None = None
 
-        self.log_level: str = "DEBUG"
+        self.log_level: str = "INFO"
+        if in_dev():
+            self.log_level = "DEBUG"
 
         # TTS settings
         self.tts_engine: str = "azure"
@@ -36,6 +42,8 @@ class UserSettings:
         self.max_workers: int = 3
 
         self.newline_mode: str = "multi"
+
+        self.cleanup: bool = False
         pass
     
     def update(self, args: dict) -> None:

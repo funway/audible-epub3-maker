@@ -47,7 +47,8 @@ class KokoroTTS(BaseTTS):
         text = text_segmenter.normalize_newlines(body_text, settings.newline_mode)
         # 根据 BRK 标记添加换行符 (Kokoro 不识别 SSML 的 <break> 标签，只能根据换行符做朗读的停顿)
         text = text.replace("_#BRK#", "\n")
-        # chunking
+        
+        # TODO: chunking
 
         if in_dev():
             html_file = output_file.with_suffix(".original_html.txt")
@@ -57,8 +58,8 @@ class KokoroTTS(BaseTTS):
             helpers.save_text(text, text_file)
 
         # 剩下的就交给 Kokoro 好了，它自己会做 分句 与 chunking (不行，还是得自己做个 chunking)
-        pipeline = KPipeline(lang_code = settings.tts_lang, repo_id = "hexgrad/Kokoro-82M")
-        generator = pipeline(text, voice = settings.tts_voice)
+        pipeline = KPipeline(lang_code=settings.tts_lang, repo_id="hexgrad/Kokoro-82M")
+        generator = pipeline(text, voice=settings.tts_voice, speed=settings.tts_speed)
         chunk_results = []
         for idx, result in enumerate(generator):
             # KPipeline.Result → https://github.com/hexgrad/kokoro/blob/f1d129d8356dde124a5550ab88d61ba25620c0fd/kokoro/pipeline.py#L333
@@ -79,7 +80,7 @@ class KokoroTTS(BaseTTS):
             for token in tokens:
                 if not token.text.strip():
                     continue  # skip empty token
-                if not token.text.strip() or token.start_ts is None or token.end_ts is None:
+                if token.start_ts is None or token.end_ts is None:
                     logger.warning(f"token times error: {token}")
                     continue
                 wb = WordBoundary(start_ms = token.start_ts * 1000,
@@ -127,7 +128,7 @@ def main():
     from audible_epub3_maker.utils.constants import DEV_OUTPUT
 
     pipeline = KPipeline(lang_code='a')
-    generator = pipeline(text, voice='af_heart')
+    generator = pipeline(text, voice='af_heart', speed=0.6)
     # pipeline = KPipeline(lang_code='z')
     # generator = pipeline(text, voice='zf_xiaoxiao')
     

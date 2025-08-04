@@ -122,6 +122,11 @@ class App(object):
         epub_output_path = settings.output_dir / settings.input_file.name
         book.save_epub(epub_output_path)
 
+        # Cleanup
+        if settings.cleanup:
+            for payload in task_payloads:
+                payload.audio_output_file.unlink(missing_ok=True)    
+
         elapsed = time.perf_counter() - start_time
         logger.info(f"🎉 Processing complete. EPUB saved to {epub_output_path} (finished in {helpers.format_seconds(elapsed)})")
         print(f"🎉 Processing complete. EPUB saved to {epub_output_path} (finished in {helpers.format_seconds(elapsed)})")
