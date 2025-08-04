@@ -1,5 +1,6 @@
 import mimetypes
 import zipfile
+from urllib.parse import quote, unquote
 from lxml import etree as ET
 
 
@@ -11,7 +12,8 @@ def init_epub_mimetypes():
         return
 
     mimetypes.init()
-    mimetypes.add_type("application/xhtml+xml", ".html")  # .html default to text/html
+    mimetypes.add_type("application/xhtml+xml", ".htm")   # modify .htm default to text/html
+    mimetypes.add_type("application/xhtml+xml", ".html")  # modify .html default to text/html
     mimetypes.add_type("application/xhtml+xml", ".xhtml")
     mimetypes.add_type("application/x-dtbncx+xml", ".ncx")
     mimetypes.add_type("application/smil+xml", ".smil")
@@ -58,3 +60,19 @@ def list_files_in_zip(zf: zipfile.ZipFile, prefix: str = "") -> set[str]:
         zi.filename for zi in zf.infolist()
         if not zi.is_dir() and zi.filename.startswith(prefix)
     }
+
+
+def safe_requote_uri(uri: str) -> str:
+    """Re-quote the given URI.
+
+    This function passes the given URI through an `unquote`/`quote` cycle to
+    ensure that it is fully and consistently quoted.
+
+    Args:
+        uri (str): _description_
+
+    Returns:
+        str: _description_
+    """
+    unquoted_uri = unquote(uri)
+    return quote(unquoted_uri)

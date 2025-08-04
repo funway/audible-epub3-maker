@@ -1,6 +1,6 @@
 # Audible EPUB3 Maker
 
-Generate audiobooks in **EPUB3 Media Overlays** format using high-quality TTS (Text-to-Speech) engines like Azure and Kokoro (🚧 Todo).
+Generate audiobooks in **EPUB3 Media Overlays** format using high-quality TTS (Text-to-Speech) engines like Azure and Kokoro.
 
 This tool converts standard EPUB files into narrated versions compatible with screen readers and audiobook readers like Thorium Reader.
 
@@ -9,7 +9,7 @@ This tool converts standard EPUB files into narrated versions compatible with sc
 ## 🚀 Features
 
 - ✅ Supports [EPUB 3 Media Overlays](https://www.w3.org/TR/epub/#sec-media-overlays)
-- 🎙️ Supports Azure TTS (Kokoro TTS support is coming soon)
+- 🎙️ Supports Azure TTS and Kokoro TTS
 - 🔊 Generates mp3 audio and integrates it into EPUB3 format
 - 🧠 Sentence-level text-to-audio alignment with SMIL sync
 - 🔁 Parallel multi-process generation for both TTS and force alignment

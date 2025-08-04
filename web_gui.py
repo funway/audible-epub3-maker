@@ -1,6 +1,7 @@
 from pathlib import Path
 import gradio as gr
 
+from audible_epub3_maker.epub.epub_book import EpubBook
 from audible_epub3_maker.config import AZURE_TTS_KEY, AZURE_TTS_REGION
 from audible_epub3_maker.utils.constants import APP_NAME, APP_FULLNAME, OUTPUT
 from audible_epub3_maker.utils import helpers
@@ -15,8 +16,22 @@ css = """
 """
 
 
-def run_preview(input_file: Path):
-    return f"hello, you have chosen {type(input_file)}, {input_file}"
+def run_preview(input_file):
+    if not input_file:
+        return
+    epub_path = Path(input_file)
+    book = EpubBook(epub_path)
+    preview = []
+    preview.append(f"Title: {book.title}")
+    preview.append(f"Identifier: {book.identifier}")
+    preview.append(f"Language: {book.language}")
+    preview.append("="*20)
+    total_chars = 0
+    for idx, ch in enumerate(book.get_chapters()):
+        
+        preview.append(f"ch[{idx}]: {ch.href}")
+    
+    return "\n".join(preview)
 
 
 def run_generation(arg):
@@ -76,7 +91,10 @@ def launch_gui():
                                     interactive=True
                                     )
 
-            preview_output = gr.Textbox(label="EPUB Preview", lines=10)
+            preview_output = gr.Textbox(label="EPUB Preview", 
+                                        lines=10,
+                                        max_lines=10,
+                                        )
             
             with gr.Column():
                 output_dir = gr.Textbox(label="Output Directory",

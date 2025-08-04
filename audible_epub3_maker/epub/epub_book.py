@@ -3,13 +3,15 @@ import zipfile
 import logging
 import uuid
 import re
+import os
 import codecs
+import posixpath
 from pathlib import Path, PurePosixPath
+from urllib.parse import unquote
 from dataclasses import dataclass
 from lxml import etree as ET
 
-from audible_epub3_maker.utils import logging_setup
-from audible_epub3_maker.epub.utils import guess_media_type, parse_xml, list_files_in_zip
+from audible_epub3_maker.epub.utils import guess_media_type, parse_xml, list_files_in_zip, safe_requote_uri
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +37,12 @@ class LazyLoad:
 
 @dataclass
 class LazyLoadFromZip(LazyLoad):
-    zip_file_path: Path
-    zip_href: str
+    zip_file_path: Path  # zip 文件的路径
+    zip_relpath: str  # 目标文件在 zip 包中的相对路径
 
     def load(self) -> bytes:
         with zipfile.ZipFile(self.zip_file_path, 'r') as zf:
-            return zf.read(self.zip_href)
+            return zf.read(self.zip_relpath)
 
 @dataclass
 class LazyLoadFromFile(LazyLoad):
@@ -57,7 +59,7 @@ class EpubItem(object):
         
         # required attrs for EPUB opf.manifest.item: [id, href, media_type]
         self.id = id
-        self.href = href
+        self.href = safe_requote_uri(href)
         self.media_type = media_type
         # optional attrs for EPUB opf.manifest.item: [fallback, media-overlay, properties] or customized
         self.attrs = attrs or {}
@@ -154,7 +156,6 @@ class EpubTextItem(EpubItem):
 class EpubNcx(EpubTextItem): pass
 
 class EpubHTML(EpubTextItem):
-
     def get_title(self) -> str:
         """
         [Uncompleted] Extracts a title from the XHTML content, prioritizing in order: <title>, <h1>, <h2>, <h3>.
@@ -180,6 +181,9 @@ class EpubHTML(EpubTextItem):
                 if text:
                     return text
         return ""
+
+    def get_chars_count(self, only_content: bool = True) -> int:
+        pass
 
 class EpubNavHTML(EpubHTML): pass
 
@@ -208,14 +212,15 @@ class EpubBook:
     '''
 
     DEFAULT_OPTIONS = {
-        # 'item_lazy_load_threshold': 16*1024*1024,
-        'item_lazy_load_threshold': 50*1024,
+        'item_lazy_load_threshold': 16*1024*1024,
+        # 'item_lazy_load_threshold': 50*1024,
     }
 
-    def __init__(self, epub_path: Path, options: dict = {}):
+    def __init__(self, epub_path: Path, options: dict | None = None):
         self.epub_path = epub_path
 
         self.options = dict(__class__.DEFAULT_OPTIONS)
+        options = options or {}
         self.options.update(options)
 
         self.container_root: ET._Element = None # container.xml 解析后的 ElementTree 根节点
@@ -319,12 +324,13 @@ class EpubBook:
             manifest_elem = self.opf_root.find(".//opf:manifest", namespaces=NAMESPACES)
             if manifest_elem is None:
                 raise EpubStructureError("No <manifest> found in opf")
+            
             manifest_items = {}
             for item_elem in manifest_elem:
                 href = item_elem.attrib["href"]
-                zip_href = self.to_zip_href(href)
-                manifest_items[zip_href] = item_elem
-            # logger.debug(f"All manifest files: {sorted(manifest_items.keys())}")
+                zip_relpath = self.to_zip_relpath(href)
+                manifest_items[zip_relpath] = item_elem
+            logger.debug(f"All manifest files: {sorted(manifest_items.keys())}")
             
             all_files = list_files_in_zip(zf)
             ignored_files = {
@@ -333,11 +339,11 @@ class EpubBook:
                 self.opf_path,
             }
             all_files = sorted(all_files - ignored_files)
-            # logger.debug(f"All zip files: {all_files}")
-            for zip_href in all_files:
-                lazy_load = LazyLoadFromZip(self.epub_path, zip_href)
+            logger.debug(f"All zip files: {all_files}")
+            for zip_relpath in all_files:
+                lazy_load = LazyLoadFromZip(self.epub_path, zip_relpath)
                 
-                item_elem = manifest_items.pop(zip_href, None)
+                item_elem = manifest_items.pop(zip_relpath, None)
                 if item_elem is not None:
                     # declared item
                     attrs = dict(item_elem.attrib)
@@ -345,33 +351,36 @@ class EpubBook:
                     href = attrs.pop("href")   
                     media_type = attrs.pop("media-type") 
                     
-                    guessed_type = guess_media_type(zip_href)
+                    guessed_type = guess_media_type(zip_relpath)
                     if media_type != guessed_type:
-                        logger.warning(f"Media type mismatch for {zip_href}: declared={media_type}, guessed={guessed_type}")
+                        logger.warning(f"Media type mismatch for {zip_relpath}: declared={media_type}, guessed={guessed_type}")
                     
                     in_manifest = True
                 else:
                     # undeclared item
-                    logger.warning(f"File in zip not declared in manifest: {zip_href}")
+                    logger.warning(f"Resource found in EPUB archive but missing from manifest: {zip_relpath}")
                     id = f"auto_{uuid.uuid4().hex[:8]}"
-                    href = str(PurePosixPath(zip_href).relative_to(opf_dir))
-                    media_type = guess_media_type(zip_href)
+                    href = os.path.relpath(zip_relpath, start=opf_dir)
+                    media_type = guess_media_type(zip_relpath)
                     attrs = {}
                     in_manifest = False
+                
+                # Create and add EpubItem instance
                 item = create_epub_item(lazy_load, id, href, media_type, attrs)
                 self.add_item(item, in_manifest)
                 
                 # load item content
                 try:
-                    zip_info = zf.getinfo(zip_href)
+                    zip_info = zf.getinfo(zip_relpath)
                     if zip_info.file_size <= int(self.options["item_lazy_load_threshold"]):
-                        item.set_raw(zf.read(zip_href))
+                        item.set_raw(zf.read(zip_relpath))
+                        # item.get_raw()  # EpubItem.get_raw() will auto load from LazyLoadFromZip but it will reopen the zip file
                 except Exception:
-                    logger.exception(f"Item not found in zip: {zip_href}")
+                    logger.exception(f"Item not found in zip: {zip_relpath}")
             
             # 检查 manifest 声明的文件是否全部加载
             for missing_file, _ in manifest_items.items():
-                logger.warning(f"Manifest declared but missing file: {zip_href}")
+                logger.warning(f"Manifest declared but missing file: {missing_file}")
 
             # 3.3 spine
             # use self.spine property
@@ -381,12 +390,12 @@ class EpubBook:
             pass
         pass
     
-    def to_zip_href(self, opf_href: str) -> str:
+    def to_zip_relpath(self, href: str) -> str:
         """
         将相对于 opf 的路径转换成相对于 zip 根目录的路径
         """
-        zip_href = str(PurePosixPath(self.opf_path).parent / opf_href)
-        return zip_href
+        zip_relpath = unquote(posixpath.normpath(PurePosixPath(self.opf_path).parent / href))
+        return zip_relpath
 
     def get_chapters(self) -> list[EpubHTML]:
         """Returns the linear reading items in the EPUB spine, excluding navigation pages.
@@ -552,7 +561,7 @@ class EpubBook:
         for item in self.items:
             if item.is_loaded:
                 content = item.get_raw()
-                zp.writestr(self.to_zip_href(item.href), content)
+                zp.writestr(self.to_zip_relpath(item.href), content)
                 continue
             
             lazyload = item.get_lazy_load()
@@ -567,21 +576,21 @@ class EpubBook:
         if len(lazyload_from_orig_epub):
             with zipfile.ZipFile(self.epub_path, "r") as zp_original:
                 for item in lazyload_from_orig_epub:
-                    zip_href = self.to_zip_href(item.href)
-                    data = zp_original.read(zip_href)
-                    zp.writestr(zip_href, data)
-                    logger.debug(f"save lazyload content from EPUB: {len(data)/1024:.2f} KB, {zip_href}")
+                    zip_relpath = self.to_zip_relpath(item.href)
+                    data = zp_original.read(zip_relpath)
+                    zp.writestr(zip_relpath, data)
+                    logger.debug(f"save lazyload content from EPUB: {len(data)/1024:.2f} KB, {zip_relpath}")
         
         for item in layzload_from_other_zip:
             other_zip_file = item.get_lazy_load().zip_file_path
             content = item.get_raw()
-            zp.writestr(self.to_zip_href(item.href), content)
+            zp.writestr(self.to_zip_relpath(item.href), content)
             logger.warning(f"save lazyload content from other zip: {len(content)/1024:.2f} KB, {other_zip_file}")
         
         for item in layzload_from_other_file:
             file_path = item.get_lazy_load().file_path
-            zp.write(file_path, arcname=self.to_zip_href(item.href))
-            logger.debug(f"save lazyload content from new file: {file_path} -> {self.to_zip_href(item.href)}")
+            zp.write(file_path, arcname=self.to_zip_relpath(item.href))
+            logger.debug(f"save lazyload content from new file: {file_path} -> {self.to_zip_relpath(item.href)}")
         pass
 
     def get_item_by_id(self, id: str) -> EpubItem | None:
@@ -609,6 +618,7 @@ def create_epub_item(raw_content: bytes | LazyLoad, id: str, href: str, media_ty
     else:
         return EpubItem(raw_content, id, href, media_type, attrs)
 
+
 def main():
     from audible_epub3_maker.segmenter.html_segmenter import html_segment_and_wrap
 
@@ -619,7 +629,7 @@ def main():
 
         # items_count = len(book.items)
         # for i, item in enumerate(book.items, start=1):
-        #     logger.debug(f"item [{i}/{items_count}], id: {item.id}, file: {book.to_zip_href(item.href)}")
+        #     logger.debug(f"item [{i}/{items_count}], id: {item.id}, file: {book.to_zip_relpath(item.href)}")
 
         chapters = book.get_chapters()
         chapters_count = len(chapters)

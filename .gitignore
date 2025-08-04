@@ -15,3 +15,4 @@ logs/*
 .env
 .DS_Store
 report.html
+manual_test.py
