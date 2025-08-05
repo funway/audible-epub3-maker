@@ -5,6 +5,9 @@ from pathlib import Path
 from audible_epub3_maker.config import settings
 from audible_epub3_maker.app import App
 
+def clean_path(p: str) -> Path:
+    return Path(p.strip())
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Generate Audible-style EPUB with TTS narration.",
@@ -13,14 +16,14 @@ def parse_args():
 
     # 1. input_file 作为位置参数
     parser.add_argument("input_file", 
-                        type=Path, 
+                        type=clean_path, 
                         help="Input EPUB file"
                         )
 
     # 2. 输出目录参数，支持 -d 和 --output_dir
     parser.add_argument(
         "-d", "--output_dir",
-        type=Path,
+        type=clean_path,
         help="Output directory (default: <input_file>_audible)"
     )
 

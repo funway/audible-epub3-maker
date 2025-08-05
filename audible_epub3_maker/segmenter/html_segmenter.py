@@ -2,7 +2,6 @@ import re
 import logging
 from bs4 import BeautifulSoup, Tag, NavigableString
 
-from audible_epub3_maker.utils import logging_setup
 from audible_epub3_maker.utils.constants import BEAUTIFULSOUP_PARSER, SEG_ID_PREFIX, SEG_MARK_ATTR
 from audible_epub3_maker.segmenter.text_segmenter import segment_text_by_re, is_readable
 

@@ -51,7 +51,7 @@ class UserSettings:
             if hasattr(self, k):
                 setattr(self, k, v)
         
-        if self.input_file and self.output_dir is None:
+        if self.input_file and not self.output_dir:
             self.output_dir = self.input_file.parent / (self.input_file.stem + "_audible")
 
         pass

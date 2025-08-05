@@ -11,7 +11,7 @@ from urllib.parse import unquote
 from dataclasses import dataclass
 from lxml import etree as ET
 
-from audible_epub3_maker.epub.utils import guess_media_type, parse_xml, list_files_in_zip, safe_requote_uri
+from audible_epub3_maker.epub.utils import guess_media_type, parse_xml, parse_html, list_files_in_zip, safe_requote_uri
 
 logger = logging.getLogger(__name__)
 
@@ -166,25 +166,17 @@ class EpubHTML(EpubTextItem):
         # TODO: 从 html 中找章节标题其实不是一个好办法，好办法是从 toc.ncx 或者 nav 中找，然后 set title 给他
         raise NotImplementedError
     
-        title_levels = ['h1', 'h2', 'h3']
-
-        try:
-            tree = parse_xml(self.get_text())
-        except Exception as e:
-            logger.warning(f"Failed to parse XHTML for {self.href}: {e}")
-            return ""
-        
-        for level in title_levels:
-            elems = tree.xpath(f"//*[local-name()='{level}']")
-            for elem in elems:
-                text = (elem.text or "").strip()
-                if text:
-                    return text
-        return ""
-
-    def get_chars_count(self, only_content: bool = True) -> int:
-        pass
-
+    def count_visible_chars(self) -> int:
+        """
+        Count the number of visible (rendered) characters in the <body> of an HTML document.
+        """
+        html_root = parse_html(self.get_raw())
+        body = html_root.xpath("//body")
+        if not body:
+            return 0
+        else:
+            return len(body[0].text_content().strip())
+    
 class EpubNavHTML(EpubHTML): pass
 
 class EpubSMIL(EpubTextItem): pass
@@ -597,6 +589,18 @@ class EpubBook:
         return next((item for item in self.items if item.id == id), None)
 
 def create_epub_item(raw_content: bytes | LazyLoad, id: str, href: str, media_type: str, attrs: dict[str, str] | None = None) -> EpubItem:
+    """Create a corresponding EpubItem (subclass) instance based on the media_type
+
+    Args:
+        raw_content (bytes | LazyLoad): _description_
+        id (str): _description_
+        href (str): _description_
+        media_type (str): _description_
+        attrs (dict[str, str] | None, optional): _description_. Defaults to None.
+
+    Returns:
+        EpubItem: _description_
+    """
     if media_type == "application/xhtml+xml":
         if "nav" in attrs.get("properties", "").split():
             return EpubNavHTML(raw_content, id, href, media_type, attrs)

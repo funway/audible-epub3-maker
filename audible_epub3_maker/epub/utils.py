@@ -2,6 +2,7 @@ import mimetypes
 import zipfile
 from urllib.parse import quote, unquote
 from lxml import etree as ET
+from lxml import html as HTML
 
 
 _EPUB_MIMETYPES_INITIALIZED = False
@@ -52,7 +53,17 @@ def parse_xml(data: bytes | str, recover: bool = True, resolve_entities: bool = 
         data = data.encode("utf-8")
 
     parser = ET.XMLParser(recover=recover, resolve_entities=resolve_entities)
-    return ET.fromstring(data, parser=parser) 
+    return ET.fromstring(data, parser=parser)
+
+def parse_html(data: bytes | str) -> HTML.HtmlElement:
+    """
+    Parse HTML content into a lxml HTMLElement
+    """
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+
+    html_tree = HTML.document_fromstring(data)
+    return html_tree
 
 
 def list_files_in_zip(zf: zipfile.ZipFile, prefix: str = "") -> set[str]:

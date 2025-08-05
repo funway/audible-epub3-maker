@@ -4,7 +4,6 @@ from pydub import AudioSegment
 
 from audible_epub3_maker.config import in_dev
 from audible_epub3_maker.utils.types import WordBoundary
-from audible_epub3_maker.utils import logging_setup
 
 logger = logging.getLogger(__name__)
 

@@ -6,6 +6,7 @@ requests
 pydub
 audioop-lts; python_version >= "3.13"
 rapidfuzz
+psutil
 
 # Azure TTS
 azure-cognitiveservices-speech

@@ -4,7 +4,6 @@ from bs4 import BeautifulSoup
 from rapidfuzz import fuzz
 import azure.cognitiveservices.speech as speechsdk
 
-from audible_epub3_maker.utils import logging_setup
 from audible_epub3_maker.utils import helpers
 from audible_epub3_maker.utils.types import WordBoundary, TTSEmptyAudioError, TTSEmptyContentError
 from audible_epub3_maker.utils.constants import BEAUTIFULSOUP_PARSER, SEG_MARK_ATTR, SEG_TAG

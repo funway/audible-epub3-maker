@@ -3,7 +3,6 @@ import re
 import unicodedata
 
 from audible_epub3_maker.config import in_dev
-from audible_epub3_maker.utils import logging_setup
 
 logger = logging.getLogger(__name__)
 if not in_dev():
