@@ -94,6 +94,7 @@ def stop_logging():
 
     if _log_listener is not None:
         _log_listener.stop()
+        _log_listener = None
     pass
 
 
