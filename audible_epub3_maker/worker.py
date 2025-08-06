@@ -1,5 +1,5 @@
-import logging
-import traceback
+import logging, os
+import psutil
 from bs4 import BeautifulSoup
 
 from audible_epub3_maker.config import settings, in_dev
@@ -11,6 +11,19 @@ from audible_epub3_maker.segmenter.html_segmenter import html_segment_and_wrap
 
 logger = logging.getLogger(__name__)
 
+
+def is_parent_alive() -> bool:
+    ppid = os.getppid()
+    if ppid == 1:
+        return False
+    
+    try:
+        parent = psutil.Process(ppid)
+        return parent.is_running()
+    except psutil.NoSuchProcess:
+        return False
+
+
 def init_worker(settings_dict, log_queue):
     """
     Subprocess initializer
@@ -20,9 +33,9 @@ def init_worker(settings_dict, log_queue):
 
     # logging
     logging_setup.setup_logging_for_worker(log_queue)
-    logging.getLogger().setLevel(getattr(logging, settings.log_level, logging.INFO))
+    logging.getLogger().setLevel(getattr(logging, settings.log_level))
 
-    logger.debug("Subprocess worker initialized.")
+    logger.debug("👷 Worker subprocess initialized.")
     pass
 
 
@@ -43,7 +56,7 @@ def task_fn(payload: TaskPayload):
     # 1. TTS synthesis
     tts = create_tts_engine(settings.tts_engine)
     wb_list = tts.html_to_speech(original_html, audio_output_file)
-    logger.info(f"[Task {payload.task_id}] 🔈 Generated audio: {audio_output_file}, Size: {helpers.format_bytes(audio_output_file.stat().st_size)}")
+    logger.info(f"[Task {payload.idx}] 🔈 Generated audio: {audio_output_file}, Size: {helpers.format_bytes(audio_output_file.stat().st_size)}")
 
     if not wb_list:
         raise NoWordBoundariesError("The TTS engine did not return any word boundaries. It may not support this feature.")
@@ -61,20 +74,39 @@ def task_fn(payload: TaskPayload):
                                          wb_list, 
                                          settings.align_threshold,
                                          audio_output_file.with_suffix(".aligns.txt"))
+    return TaskResult(
+        taged_html=segmented_html,
+        audio_file=audio_output_file,
+        alignments=alignments
+    )
+
+
+def test_fn(payload: TaskPayload):
+    print(f"Task processing: {payload}")
     
-    return TaskResult(task_id = payload.task_id,
-                      taged_html = segmented_html,
-                      audio_file= audio_output_file,
-                      alignments = alignments,
-                      )
+    import time
+    time.sleep(30)
+
+    raise NotImplementedError
 
 
 def task_fn_wrap(payload: TaskPayload):
     try:
-        return (True, task_fn(payload))
+        # return (True, task_fn(payload))
+        return (True, test_fn(payload))
+    
     except Exception as e:
-        logger.exception(f"Task {payload.task_id} failed during execution")
-        return (False, TaskErrorResult(payload = payload,
-                                       error_type = type(e).__name__,
-                                       error_msg = str(e)
-                                       ))
+        logger.exception(f"⚠️ Task {payload.idx} failed during execution")
+        return (False, TaskErrorResult(
+            error_type=type(e).__name__,
+            error_msg=str(e),
+            payload=payload
+        ))
+    
+    finally:
+        if not is_parent_alive():
+            import sys, signal
+            pid = os.getpid()
+            print(f"🛑 Main process (parent) has dead. Shutting down worker process [{pid}]...")
+            sys.stdout.flush()
+            os.kill(pid, signal.SIGTERM)

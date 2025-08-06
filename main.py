@@ -1,12 +1,12 @@
 import argparse
 import logging
+import multiprocessing as mp
 from pathlib import Path
 
-from audible_epub3_maker.config import settings
-from audible_epub3_maker.app import App
 
 def clean_path(p: str) -> Path:
     return Path(p.strip())
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -123,12 +123,22 @@ def parse_args():
 
     return parser.parse_args()
 
+
 def main():
+    # 1. Set multiprocessing mode
+    mp.set_start_method("spawn")
+
+    # 2. Read user settings from command line args
+    from audible_epub3_maker.config import settings
     args = vars(parse_args())
     settings.update(args)
     
-    logging.getLogger().setLevel(getattr(logging, settings.log_level))
+    # 3. Setup logging system
+    from audible_epub3_maker.utils import logging_setup
+    logging.getLogger().setLevel(getattr(logging, settings.log_level.upper()))
 
+    # 4. Running application
+    from audible_epub3_maker.app import App
     app = App()
     app.run()
     pass

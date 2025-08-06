@@ -34,7 +34,7 @@ class TagAlignment:
 
 @dataclass
 class TaskPayload(object):
-    task_id: int | str
+    idx: int
     html_text: str
     audio_output_file: Path
     audio_metadata: dict
@@ -42,7 +42,7 @@ class TaskPayload(object):
     def __str__(self):
         return (
             f"<{self.__class__.__name__} "
-            f"task_id={self.task_id}, "
+            f"idx={self.idx}, "
             f"audio_output_file={self.audio_output_file}, "
             f"...>"
         )
@@ -50,7 +50,6 @@ class TaskPayload(object):
 
 @dataclass
 class TaskResult(object):
-    task_id: int | str
     taged_html: str
     audio_file: Path
     alignments: list[TagAlignment]
@@ -58,21 +57,19 @@ class TaskResult(object):
     def __str__(self):
         return (
             f"<{self.__class__.__name__} "
-            f"task_id={self.task_id}, "
             f"{self.audio_file}, {len(self.alignments)} alignments ...>"
         )
 
 @dataclass
 class TaskErrorResult(object):
-    payload: TaskPayload
     error_type: str
     error_msg: str
+    payload: TaskPayload
 
     def __str__(self):
         return (
             f"<{self.__class__.__name__} "
-            f"task_id={self.payload.task_id}, "
-            f"{self.error_type}, {self.error_msg} ...>"
+            f"Error type: {self.error_type}, Error msg: {self.error_msg} ...>"
         )
 
 class TTSEmptyContentError(ValueError): pass

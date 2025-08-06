@@ -50,14 +50,14 @@ def setup_logging_for_main():
         handlers.append(console_handler)
 
     if _log_queue is None:
-        _log_queue = Queue()
-    _log_listener = QueueListener(_log_queue, *handlers)
-    _log_listener.start()
+        _log_queue = Queue()                                # Create the logging quque
+    _log_listener = QueueListener(_log_queue, *handlers)    # Create the consumer for logging queue
+    _log_listener.start()                                   # Start the consumer `thread`
     
     root_logger.handlers.clear()
-    root_logger.addHandler(QueueHandler(_log_queue))
+    root_logger.addHandler(QueueHandler(_log_queue))        # QueueHandler as a producer for logging queue
 
-    atexit.register(stop_logging)  # Register automatic shutdown hook
+    atexit.register(stop_logging)  # Register automatic shutdown hook (when SIGINT, SIGTERM, raise Exception)
     _initialized = True
     pass
 
