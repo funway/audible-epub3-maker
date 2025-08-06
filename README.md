@@ -1,8 +1,8 @@
 # 🎧 Audible EPUB3 Maker
 
-Generate audiobooks in **EPUB3 Media Overlays** format using high-quality TTS (Text-to-Speech) engines like **Azure** and **Kokoro**, now with an intuitive **Web GUI**.
+Generate audiobooks from plain EPUB files in **EPUB3 Media Overlays** format using high-quality TTS (Text-to-Speech) engines like **Azure** and **Kokoro**, now with an intuitive **Web GUI**.
 
-This tool converts standard EPUB files into narrated versions compatible with screen readers and audiobook readers like Thorium Reader.
+You can read or listen to the generated EPUB using any reader that supports EPUB 3 Media Overlays, such as Thorium Reader.
 
 ---
 
