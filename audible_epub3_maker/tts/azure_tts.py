@@ -36,7 +36,7 @@ class AzureTTS(BaseTTS):
         default = 3000
         lang = settings.tts_lang.lower()
         if lang.startswith(("zh", "ja", "ko")):
-            default = 2000
+            default = 1600
         
         if settings.tts_chunk_len <= 0:
             return default

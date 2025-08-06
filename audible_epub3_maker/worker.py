@@ -82,18 +82,19 @@ def task_fn(payload: TaskPayload):
 
 
 def test_fn(payload: TaskPayload):
-    print(f"Test task processing: {payload}")
+    logger.debug(f"Test task processing: {payload}")
     
     import time
     time.sleep(30)
+    logger.debug(f"Test worker wakeup!")
 
     raise NotImplementedError
 
 
 def task_fn_wrap(payload: TaskPayload):
     try:
-        # return (True, task_fn(payload))
-        return (True, test_fn(payload))
+        return (True, task_fn(payload))
+        # return (True, test_fn(payload))
     
     except Exception as e:
         logger.exception(f"⚠️ Task {payload.idx} failed during execution")

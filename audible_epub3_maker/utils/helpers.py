@@ -350,7 +350,6 @@ def validate_tts_settings():
     
 
 def validate_settings():
-
     if not settings.input_file or not settings.input_file.is_file():
         raise FileNotFoundError(f"Input file not found: {settings.input_file}")
     

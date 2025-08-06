@@ -1,3 +1,4 @@
+import os
 import sys
 import subprocess
 import shlex
@@ -13,16 +14,73 @@ from audible_epub3_maker.utils.constants import APP_NAME, APP_FULLNAME, OUTPUT, 
 from audible_epub3_maker.utils import helpers
 
 
-css = """
+# NOTE:
+# Global variables defined at the module level are shared across all users and sessions.
+# This means that refreshing the page, opening a new browser tab, or accessing from different clients
+# will all interact with the same variable.
+#
+# If you need per-session or per-user isolation (e.g., each user maintains their own counter or state),
+# use `gr.State()` within your Gradio app to store and manage session-specific data.
+
+CSS = """
 #adv_sets > button > span:first-of-type {
     font-size: var(--text-lg);
     font-weight: var(--prose-header-text-weight);
     color: var(--body-text-color);
 }
 """
-langs_voices = {}  # 存储 TTS 的语言与声音选项
+BTN_RUN_IDLE = "🚀  Run"
+BTN_RUN_RUNNING = "🔁 Running"
+BTN_CANCEL = "🛑 Cancel"
+LOG_MAX_LINES = 1000  # 最多保留的日志行数
+
 aem_process: subprocess.Popen | None = None  # 当前运行的 audible epub3 maker 主进程
+langs_voices = {}  # 存储 TTS 的语言与声音选项
 log_file = LOG_FILE
+log_inode = -1
+log_offset = -1
+log_buffer = []
+
+
+def tail_log_file():
+    global log_inode, log_offset, log_buffer
+    try:
+        if not os.path.exists(log_file):
+            return gr.update(value="‼️[Log Error] Log file not found!")
+        
+        stat = os.stat(log_file)
+        current_inode = stat.st_ino
+        file_size = stat.st_size
+
+        if log_offset == -1:
+            # initialize
+            log_inode = current_inode
+            log_offset = file_size
+            log_buffer.clear()
+
+        if log_inode != current_inode:
+            # file rotated
+            log_inode = current_inode
+            log_offset = 0
+        
+        elif log_offset > file_size:
+            # file cleared
+            log_offset = 0
+            log_buffer.clear()
+        
+        with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+            f.seek(log_offset)          # jump to offset
+            new_lines = f.readlines()   # read all lines from offset
+            log_offset = f.tell()       # remember new offset
+
+        log_buffer.extend(line.rstrip() for line in new_lines)
+        if len(log_buffer) > LOG_MAX_LINES:
+            log_buffer = log_buffer[-LOG_MAX_LINES:]
+        
+        return gr.update(value="\n".join(log_buffer))
+
+    except Exception as e:
+        return gr.update(value=f"‼️[Log Error] {e}")
 
 
 def run_preview(input_file):
@@ -54,12 +112,12 @@ def run_generation(input_file, output_dir, log_level, cleanup,
     global aem_process
 
     if aem_process and aem_process.poll() is None:
-        raise RuntimeError(f"AEM process [{Path(input_file).name}] is still running, please do not run again.")
+        raise RuntimeError(f"AEM process [PID={aem_process.pid}] is already running. Please do not start it again.")
     
     args = [
         sys.executable, "main.py",
-        shlex.quote(str(input_file)),
-        "-d", shlex.quote(str(output_dir)) if output_dir else "",
+        str(input_file),
+        "-d", str(output_dir) if output_dir else "",
         "--log_level", log_level,
         "--tts_engine", tts_engine.lower(),
         "--tts_lang", tts_lang,
@@ -77,12 +135,19 @@ def run_generation(input_file, output_dir, log_level, cleanup,
     aem_process = subprocess.Popen(args)
     pass
 
+
+def check_process():
+    if aem_process and aem_process.poll() is None:
+        # is running
+        return gr.update(value=BTN_RUN_RUNNING, interactive=False)
+    else:
+        return gr.update(value=BTN_RUN_IDLE, interactive=True)
+
  
 def on_run_click(input_file, output_dir, log_level, cleanup,
                  tts_engine, tts_lang, tts_voice, tts_speed,
                  tts_chunk_len, newline_mode, align_threshold, max_workers):
     # 检查 input_file, output_dir, tts_engine 必须不为空
-    # 然后调用 run_generation
     if not input_file:
         raise gr.Error(f"Select a EPUB file to process")
         # return ("", gr.update(), gr.update())
@@ -90,8 +155,6 @@ def on_run_click(input_file, output_dir, log_level, cleanup,
         raise gr.Error(f"Select a TTS engine to continue")
         # return ("", gr.update(), gr.update())
     
-    print(f"input_file: {type(input_file)}, {input_file.name}, out: {type(output_dir)},{output_dir}, tts_engine: {type(tts_engine)},{tts_engine}")
-
     try:
         run_generation(
             input_file=input_file.name,
@@ -116,6 +179,7 @@ def on_cancel_click():
     
     if aem_process and aem_process.poll() is None:
         aem_process.terminate()
+        aem_process = None
         gr.Info(f"AEM process terminated")
     else:
         gr.Warning(f"No AEM process running")
@@ -162,7 +226,7 @@ def on_lang_change(tts_lang):
 
 
 def launch_gui():
-    with gr.Blocks(title=APP_NAME, css=css) as demo:
+    with gr.Blocks(theme=gr.themes.Ocean(), title=APP_NAME, css=CSS) as demo:
         gr.Markdown(f"# 🎧 {APP_FULLNAME} - Web GUI")
         gr.Markdown("---")
 
@@ -252,11 +316,15 @@ def launch_gui():
                                         )
 
         with gr.Row():
-            run_btn = gr.Button("🚀  Run", variant="primary")
-            cancel_btn = gr.Button("🛑  Cancel")
+            run_btn = gr.Button(BTN_RUN_IDLE, variant="primary")
+            cancel_btn = gr.Button(BTN_CANCEL)
         
-        log_output = Log(log_file, tail=1, dark=True)
+        log_output = gr.Textbox(label="Log Output", 
+                                lines=20,
+                                max_lines=20,
+                                interactive=False)
 
+        # Events
         input_file.change(fn=run_preview, inputs=input_file, outputs=preview_output)
         tts_engine.change(fn=on_engine_change, inputs=tts_engine, outputs=[tts_lang, tts_voice])
         tts_lang.change(fn=on_lang_change, inputs=tts_lang, outputs=tts_voice)
@@ -273,6 +341,16 @@ def launch_gui():
             fn=on_cancel_click,
             inputs=None,
             outputs=None
+        )
+        gr.Timer(0.5).tick(
+            fn=check_process,
+            inputs=None,
+            outputs=[run_btn]
+        )
+        gr.Timer(0.5).tick(
+            fn=tail_log_file,
+            inputs=None,
+            outputs=[log_output]
         )
     
     demo.launch()

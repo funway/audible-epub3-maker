@@ -60,7 +60,7 @@ class App(object):
                                              ))
         
         # 3. Dispatch tasks and wait for completion
-        logger.info(f"🚀 Start processing {settings.input_file} ...")
+        logger.info(f"🚀 Start processing [{settings.input_file.name}] ... (Total tasks: {len(payload_list)})")
         start_time = time.perf_counter()
         with ProcessPoolExecutor(max_workers=min(settings.max_workers, len(chapter_list)),
                                  initializer=init_worker,
