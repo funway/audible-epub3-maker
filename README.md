@@ -1,43 +1,76 @@
 # Audible EPUB3 Maker
 
-Generate audiobooks in **EPUB3 Media Overlays** format using high-quality TTS (Text-to-Speech) engines like Azure and Kokoro.
+Generate audiobooks in **EPUB3 Media Overlays** format using high-quality TTS (Text-to-Speech) engines like **Azure** and **Kokoro**, now with an intuitive **Web GUI**.
 
 This tool converts standard EPUB files into narrated versions compatible with screen readers and audiobook readers like Thorium Reader.
 
 ---
 
-## 🚀 Features
+## ✨ Features
 
-- ✅ Supports [EPUB 3 Media Overlays](https://www.w3.org/TR/epub/#sec-media-overlays)
-- 🎙️ Supports Azure TTS and Kokoro TTS
-- 🔊 Generates mp3 audio and integrates it into EPUB3 format
-- 🧠 Sentence-level text-to-audio alignment with SMIL sync
-- 🔁 Parallel multi-process generation for both TTS and force alignment
-
+- Convert plain-text EPUB books into human-like audiobooks.
+- Output conforms to **[EPUB 3 Media Overlays](https://www.w3.org/TR/epub/#sec-media-overlays)** specification.
+- Supports TTS engines:
+  - Azure TTS (high-quality cloud service)
+  - Kokoro-82M (offline open-source model)
+- Automatic sentence segmentation and force alignment
+- Parallel multi-process generation
+- Gradio-based Web GUI for easy interaction without command line
+- Docker-ready architecture for easy deployment (coming soon)
 ---
 
 ## 🛠 Installation
 
+### From Source
+#### 1. pip install
 ```bash
 git clone https://github.com/<your-name>/audible-epub3-maker.git
 cd audible-epub3-maker
 pip install -r requirements.txt
 ```
 
-You must also configure Azure or Kokoro voice environment depending on your engine choice.
+#### 2. TTS Engine Configuration
+
+Depending on the engine you plan to use, follow the steps below:
+
+- **Azure**:
+  - You must configure the following two environment variables:
+    ```bash
+    AZURE_TTS_KEY=your_azure_speech_key
+    AZURE_TTS_REGION=your_speech_region
+    ```
+  - You can define them:
+    - In a `.env` file in the project root (recommended)
+    - Or `export` them manually in your shell or `.bashrc` / `.zshrc` file:
+      ```bash
+      export AZURE_TTS_KEY=your_key
+      export AZURE_TTS_REGION=your_region
+      ```
+
+- **Kokoro**:
+  - No environment configuration is required.
+  - The model file will automatically download on first use.
+
+
+### From Docker (Comming Soon)
 
 ---
 
 ## ⚙️ Usage
 
+### CLI
+
 ```bash
-python main.py <input_file.epub> [options]
+python main.py <input_file.epub> -d <output_dir> \
+    --tts_engine azure \
+    --tts_lang en-US \
+    --tts_voice en-US-JennyMultilingualNeural
 ```
 
-### Required:
+#### Required:
 - `input_file`: The path to the source EPUB file.
 
-### Optional arguments:
+#### Optional arguments:
 
 | Option                | Description                                                                                  |
 | --------------------- | -------------------------------------------------------------------------------------------- |
@@ -46,15 +79,15 @@ python main.py <input_file.epub> [options]
 | `--tts_engine`        | TTS engine: `azure` or `kokoro`. Default: azure                                              |
 | `--tts_lang`          | Language code. Default: `en-US` for Azure                                                    |
 | `--tts_voice`         | Voice name. Default: `en-US-AvaMultilingualNeural` (Azure)                                   |
+| `--tts_speed`         | Playback speed for TTS synthesis (e.g., 1.0 = normal speed). Default: 1.0                    |
 | `--tts_chunk_len`     | Max characters per TTS chunk. Default: auto (2000 for zh/ja/ko, 3000 for others)             |
-| `-m`, `--max_workers` | Number of worker processes for multiprocessing. Default: 3                                   |
-| `-f`, `--force`       | Force all prompts to be accepted (non-interactive mode)                                      |
 | `--newline_mode`      | How to detect paragraph breaks from newlines: `none`, `single`, or `multi`. Default: `multi` |
+| `-m`, `--max_workers` | Number of worker processes for multiprocessing. Default: 3                                   |
 | `--align_threshold`   | Fuzzy match threshold for force alignment (0–100). Default: 95.0                             |
+| `-f`, `--force`       | Force all prompts to be accepted (non-interactive mode)                                      |
+| `--cleanup`           | Remove temporary files (**.mp3**) after generation. Default: False                           |
 
----
-
-## 📦 Example
+#### 📦 Example
 
 ```bash
 python main.py mybook.epub \
@@ -65,6 +98,14 @@ python main.py mybook.epub \
     -m 4 \
     --log_level DEBUG
 ```
+
+### Web GUI
+
+```bash
+python web_gui.py
+```
+
+Then open your browser and interact with the friendly interface!
 
 ---
 
@@ -77,12 +118,8 @@ python main.py mybook.epub \
 
 ## 📝 License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+This project is licensed under the MIT License.
 
 ---
 
-## 🙏 Acknowledgements
 
-- [EPUB 3](https://www.w3.org/TR/epub/)
-- [Azure Speech Service](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/get-started-text-to-speech)
-- [Kokoro TTS](https://huggingface.co/hexgrad/Kokoro-82M)
