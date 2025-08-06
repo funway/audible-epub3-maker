@@ -1,4 +1,4 @@
-# Audible EPUB3 Maker
+# 🎧 Audible EPUB3 Maker
 
 Generate audiobooks in **EPUB3 Media Overlays** format using high-quality TTS (Text-to-Speech) engines like **Azure** and **Kokoro**, now with an intuitive **Web GUI**.
 
@@ -21,7 +21,7 @@ This tool converts standard EPUB files into narrated versions compatible with sc
 
 ## 🛠 Installation
 
-### From Source
+### ⚙️ From Source
 #### 1. pip install
 ```bash
 git clone https://github.com/<your-name>/audible-epub3-maker.git
@@ -52,13 +52,13 @@ Depending on the engine you plan to use, follow the steps below:
   - The model file will automatically download on first use.
 
 
-### From Docker (Comming Soon)
+### 🐳 From Docker (Comming Soon)
 
 ---
 
-## ⚙️ Usage
+## 🚀 Usage
 
-### CLI
+### 🖥️ CLI
 
 ```bash
 python main.py <input_file.epub> -d <output_dir> \
@@ -87,7 +87,7 @@ python main.py <input_file.epub> -d <output_dir> \
 | `-f`, `--force`       | Force all prompts to be accepted (non-interactive mode)                                      |
 | `--cleanup`           | Remove temporary files (**.mp3**) after generation. Default: False                           |
 
-#### 📦 Example
+#### Example
 
 ```bash
 python main.py mybook.epub \
@@ -99,7 +99,7 @@ python main.py mybook.epub \
     --log_level DEBUG
 ```
 
-### Web GUI
+### 🌐 Web GUI
 
 ```bash
 python web_gui.py
@@ -109,14 +109,14 @@ Then open your browser and interact with the friendly interface!
 
 ---
 
-## 📚 Output
+## 💾 Output
 
 - `*.mp3`: Generated audio for each chapter
 - `*.epub`: A new EPUB file with embedded mp3 audio and synchronized smil overlays
 
 ---
 
-## 📝 License
+## 📄 License
 
 This project is licensed under the MIT License.
 
