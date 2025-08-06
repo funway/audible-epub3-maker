@@ -35,7 +35,7 @@ class App(object):
 
         if book.language != settings.tts_lang:
             msg = (
-                f"⚠️ EPUB language ({book.language}) does not match TTS language setting ({settings.tts_lang}).\n"
+                f"⚠️ == EPUB language ({book.language}) does not match TTS language setting ({settings.tts_lang}).\n"
                 f"Do you want to continue using TTS language '{settings.tts_lang}'?"
             )
             helpers.confirm_or_exit(msg)

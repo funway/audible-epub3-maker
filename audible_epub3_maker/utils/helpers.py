@@ -1,4 +1,4 @@
-import logging, math, json, os, sys
+import logging, math, json, os, sys, time
 import requests
 from html import escape
 from pathlib import Path
@@ -375,7 +375,9 @@ def confirm_or_exit(msg: str):
         print(f"{msg} → [force-confirm] proceeding without prompt.")
         return
     
+    time.sleep(0.1)  # Give some time for console logging to flush.
     ans = input(f"{msg} [y/n]: ").strip().lower()
+    
     if ans != 'y':
         logger.debug(f"{msg} → Aborted by user.")
         print("Aborted by user.")

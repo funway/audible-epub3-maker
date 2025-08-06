@@ -22,7 +22,6 @@ css = """
 """
 langs_voices = {}  # 存储 TTS 的语言与声音选项
 aem_process: subprocess.Popen | None = None  # 当前运行的 audible epub3 maker 主进程
-log_buffer = []
 log_file = LOG_FILE
 
 
@@ -52,7 +51,7 @@ def run_preview(input_file):
 def run_generation(input_file, output_dir, log_level, cleanup,
                    tts_engine, tts_lang, tts_voice, tts_speed,
                    tts_chunk_len, newline_mode, align_threshold, max_workers):
-    global aem_process, log_buffer
+    global aem_process
 
     if aem_process and aem_process.poll() is None:
         raise RuntimeError(f"AEM process [{Path(input_file).name}] is still running, please do not run again.")
@@ -84,9 +83,6 @@ def on_run_click(input_file, output_dir, log_level, cleanup,
                  tts_chunk_len, newline_mode, align_threshold, max_workers):
     # 检查 input_file, output_dir, tts_engine 必须不为空
     # 然后调用 run_generation
-    global log_buffer
-    log_buffer.clear()
-    
     if not input_file:
         raise gr.Error(f"Select a EPUB file to process")
         # return ("", gr.update(), gr.update())
@@ -116,7 +112,7 @@ def on_run_click(input_file, output_dir, log_level, cleanup,
 
 
 def on_cancel_click():
-    global aem_process, log_buffer
+    global aem_process
     
     if aem_process and aem_process.poll() is None:
         aem_process.terminate()

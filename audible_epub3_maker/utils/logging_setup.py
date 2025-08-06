@@ -7,9 +7,9 @@ from audible_epub3_maker.config import settings, in_dev
 from audible_epub3_maker.utils.constants import LOG_FILE, LOG_DIR, LOG_FORMAT, LOG_FORMAT_SIMPLE
 
 
-_log_queue = None
-_log_listener = None
-_initialized = False
+_log_queue: Queue = None
+_log_listener: QueueListener = None
+_initialized: bool = False
 
 def _is_main_process() -> bool:
     return current_process().name == "MainProcess"
