@@ -4,7 +4,7 @@ from logging.handlers import RotatingFileHandler, QueueHandler, QueueListener
 from multiprocessing import Queue, current_process
 
 from audible_epub3_maker.config import settings, in_dev
-from audible_epub3_maker.utils.constants import LOG_FILE, LOG_DIR, LOG_FORMAT
+from audible_epub3_maker.utils.constants import LOG_FILE, LOG_DIR, LOG_FORMAT, LOG_FORMAT_SIMPLE
 
 
 _log_queue = None
@@ -31,8 +31,6 @@ def setup_logging_for_main():
         return
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    root_logger = logging.getLogger()
-    root_logger.setLevel(getattr(logging, settings.log_level.upper()))
 
     formatter = logging.Formatter(LOG_FORMAT)
     file_handler = RotatingFileHandler(filename=LOG_FILE, 
@@ -41,19 +39,23 @@ def setup_logging_for_main():
                                        backupCount=3,
                                        encoding='utf-8',)
     file_handler.setFormatter(formatter)
-    
-    handlers = [file_handler]
-    
+    console_handler = logging.StreamHandler()
     if in_dev():
-        console_handler = logging.StreamHandler()
+        # for devloper console
         console_handler.setFormatter(formatter)
-        handlers.append(console_handler)
+    else:
+        # for user console
+        console_handler.setFormatter(logging.Formatter(LOG_FORMAT_SIMPLE, datefmt="%Y%m%d %H:%M:%S"))
+        console_handler.setLevel( max(logging.INFO, getattr(logging, settings.log_level.upper())) )
+    handlers = [file_handler, console_handler]
 
     if _log_queue is None:
         _log_queue = Queue()                                # Create the logging quque
     _log_listener = QueueListener(_log_queue, *handlers)    # Create the consumer for logging queue
     _log_listener.start()                                   # Start the consumer `thread`
     
+    root_logger = logging.getLogger()
+    root_logger.setLevel(getattr(logging, settings.log_level.upper()))
     root_logger.handlers.clear()
     root_logger.addHandler(QueueHandler(_log_queue))        # QueueHandler as a producer for logging queue
 

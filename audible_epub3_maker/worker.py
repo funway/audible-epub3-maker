@@ -82,7 +82,7 @@ def task_fn(payload: TaskPayload):
 
 
 def test_fn(payload: TaskPayload):
-    print(f"Task processing: {payload}")
+    print(f"Test task processing: {payload}")
     
     import time
     time.sleep(30)

@@ -11,7 +11,6 @@ from audible_epub3_maker.utils.types import TaskPayload
 from audible_epub3_maker.epub.epub_book import EpubBook, EpubHTML, EpubAudio, LazyLoadFromFile, EpubSMIL
 from audible_epub3_maker.worker import init_worker, task_fn_wrap
 
-
 logger = logging.getLogger(__name__)
 executor: Executor | None = None
 
@@ -29,16 +28,10 @@ class App(object):
     def run(self):
         global executor
         setup_signal_handlers()
-        # time.sleep(20)
 
-        # 1. Validate user settings
-        helpers.validate_settings()
-        logger.info(f"⚙️ Settings: {settings.to_dict()}")
-        
-        # 2. Load EPUB file
+        # 1. Load EPUB file
         book = EpubBook(settings.input_file)
         logger.info(f"📕 EPUB Book Info: title = [{book.title}], identifier = [{book.identifier}], language = [{book.language}]")
-        print(f"📕 EPUB Book Info: title = [{book.title}], identifier = [{book.identifier}], language = [{book.language}]")
 
         if book.language != settings.tts_lang:
             msg = (
@@ -47,7 +40,7 @@ class App(object):
             )
             helpers.confirm_or_exit(msg)
 
-        # 3. Prepare payloads for TTS and Forcealignment tasks
+        # 2. Prepare payloads for TTS and Forcealignment tasks
         chapter_list = book.get_chapters()
         payload_list: list[TaskPayload] = []
         success_list: list[int] = []
@@ -66,8 +59,8 @@ class App(object):
                                              audio_metadata=chapter_audio_metadata,
                                              ))
         
-        # 4. Dispatch tasks and wait for completion
-        print(f"🚀 Start processing {settings.input_file} ...")
+        # 3. Dispatch tasks and wait for completion
+        logger.info(f"🚀 Start processing {settings.input_file} ...")
         start_time = time.perf_counter()
         with ProcessPoolExecutor(max_workers=min(settings.max_workers, len(chapter_list)),
                                  initializer=init_worker,
@@ -89,16 +82,15 @@ class App(object):
                     success, task_result = future.result()
                 except Exception as e:
                     logger.exception(f"🛑 Unexpected executor-level error for task {idx}: {e}")
-                    print(f"🛑 Unexpected executor-level error for task {idx}: {e}")
                     raise e
 
                 if success:
-                    print(f"✅ [Task {idx}] complete. {task_result}")
+                    logger.info(f"✅ [Task {idx}] complete. {task_result}")
                     
-                    # 0. Get the corresponding chapter item
+                    # s0. Get the corresponding chapter item
                     chapter: EpubHTML = chapter_list[idx]
 
-                    # 1. Add audio to EPUB
+                    # s1. Add audio to EPUB
                     aud_id = f"aud_{idx}"
                     aud_suffix = task_result.audio_file.suffix
                     aud_href = f"audio/{aud_id}{aud_suffix}"
@@ -109,7 +101,7 @@ class App(object):
                                            )
                     book.add_item(audio_item)
 
-                    # 2. Add SMIL
+                    # s2. Add SMIL
                     smil_href = str(chapter.href) + ".smil"
                     smil_text = helpers.generate_smil_content(smil_href, chapter.href, aud_href, task_result.alignments)
                     smil_id = f"sm_{idx}"
@@ -120,30 +112,28 @@ class App(object):
                                          )
                     book.add_item(smil_item)
 
-                    # 3. Update the corresponding chapter item
+                    # s3. Update the corresponding chapter item
                     chapter.attrs["media-overlay"] = smil_id  # Add overlay property 
                     chapter.set_text(task_result.taged_html)  # Modify HTML text
                     
                     success_list.append(idx)
                 else:
-                    print(f"❌ [Task {idx}] failed. {task_result}")
+                    logger.warning(f"❌ [Task {idx}] failed. {task_result}")
                     failed_list.append(idx)
         
+        # 4. Report and save
         elapsed = time.perf_counter() - start_time
         logger.info(f"🎉 Processing complete. {len(success_list)} success, {len(failed_list)} failed. (finished in {helpers.format_seconds(elapsed)})")
-        print(f"🎉 Processing complete. {len(success_list)} success, {len(failed_list)} failed. (finished in {helpers.format_seconds(elapsed)})")
-        
         if len(success_list) == 0:
             # All failed
-            print("😔 Oops! All tasks failed - no EPUB could be created.")
+            logger.warning("😔 Oops! All tasks failed - no EPUB could be created.")
         else:
             # Save EPUB
             epub_output_path = settings.output_dir / settings.input_file.name
             book.save_epub(epub_output_path)
             logger.info(f"💾 EPUB saved to {epub_output_path}")
-            print(f"💾 EPUB saved to {epub_output_path}")
 
-        # Cleanup
+        # 5. Cleanup
         if settings.cleanup:
             for payload in payload_list:
                 payload.audio_output_file.unlink(missing_ok=True)    

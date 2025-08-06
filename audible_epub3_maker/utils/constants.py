@@ -13,8 +13,8 @@ DEV_OUTPUT = BASE_DIR / "dev_output"
 # logging config
 LOG_DIR = BASE_DIR / "logs"
 LOG_FILE = LOG_DIR / "app.log"
-LOG_FORMAT = "%(asctime)s %(levelname)s [p%(process)d,t%(thread)d] %(name)s.%(funcName)s - %(message)s"
-LOG_FORMAT_SIMPLE = "[p%(process)d] %(levelname)s: %(message)s"
+LOG_FORMAT = "%(asctime)s [%(levelname)5s] [p%(process)d,t%(thread)d] %(name)s.%(funcName)s:%(lineno)d - %(message)s"
+LOG_FORMAT_SIMPLE = "[%(asctime)s] [p%(process)d] [%(levelname)s] - %(message)s"
 
 # HTML segmentation config
 BEAUTIFULSOUP_PARSER = "lxml-xml"

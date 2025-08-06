@@ -317,12 +317,10 @@ def validate_tts_settings():
         }
         # 检查语言是否受支持
         if settings.tts_lang.lower() not in (k.lower() for k in langs_voices_lowers):
-            logger.warning(f"TTS language '{settings.tts_lang}' not supported by Azure TTS.")
             raise ValueError(f"Azure TTS does not support language: {settings.tts_lang}")
 
         # 检查声音是否在该语言中受支持
         if settings.tts_voice.lower() not in langs_voices_lowers[settings.tts_lang.lower()]:
-            logger.warning(f"TTS voice '{settings.tts_voice}' not supported for language '{settings.tts_lang}' in Azure TTS.")
             raise ValueError(
                 f"Azure TTS does not support voice '{settings.tts_voice}' for language '{settings.tts_lang}'"
             )

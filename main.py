@@ -1,5 +1,6 @@
 import argparse
 import logging
+import sys
 import multiprocessing as mp
 from pathlib import Path
 
@@ -136,8 +137,18 @@ def main():
     # 3. Setup logging system
     from audible_epub3_maker.utils import logging_setup
     logging.getLogger().setLevel(getattr(logging, settings.log_level.upper()))
+    logger = logging.getLogger(__name__)
 
-    # 4. Running application
+    # 4. Validate user settings
+    from audible_epub3_maker.utils import helpers
+    logger.info(f"⚙️ Settings: {settings.to_dict()}")
+    try:
+        helpers.validate_settings()
+    except Exception as e:
+        logger.error(f"🛑 [Abort] Settings validation failed: {e}")
+        sys.exit(1)
+
+    # 5. Running application
     from audible_epub3_maker.app import App
     app = App()
     app.run()

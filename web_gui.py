@@ -1,9 +1,15 @@
+import sys
+import subprocess
+import shlex
 from pathlib import Path
+from urllib.parse import unquote
+
 import gradio as gr
+from gradio_log import Log
 
 from audible_epub3_maker.epub.epub_book import EpubBook
 from audible_epub3_maker.config import AZURE_TTS_KEY, AZURE_TTS_REGION
-from audible_epub3_maker.utils.constants import APP_NAME, APP_FULLNAME, OUTPUT
+from audible_epub3_maker.utils.constants import APP_NAME, APP_FULLNAME, OUTPUT, BEAUTIFULSOUP_PARSER, LOG_FILE
 from audible_epub3_maker.utils import helpers
 
 
@@ -14,6 +20,10 @@ css = """
     color: var(--body-text-color);
 }
 """
+langs_voices = {}  # 存储 TTS 的语言与声音选项
+aem_process: subprocess.Popen | None = None  # 当前运行的 audible epub3 maker 主进程
+log_buffer = []
+log_file = LOG_FILE
 
 
 def run_preview(input_file):
@@ -25,19 +35,96 @@ def run_preview(input_file):
     preview.append(f"Title: {book.title}")
     preview.append(f"Identifier: {book.identifier}")
     preview.append(f"Language: {book.language}")
+    
     preview.append("="*20)
     total_chars = 0
     for idx, ch in enumerate(book.get_chapters()):
-        
-        preview.append(f"ch[{idx}]: {ch.href}")
+        chars_count = ch.count_visible_chars()
+        total_chars += chars_count
+        preview.append(f"ch[{idx}]: {unquote(ch.href)}  ({chars_count:,} characters)")
+    
+    preview.append("="*20)
+    preview.append(f"Total characters: {total_chars:,}")
     
     return "\n".join(preview)
 
 
-def run_generation(arg):
+def run_generation(input_file, output_dir, log_level, cleanup,
+                   tts_engine, tts_lang, tts_voice, tts_speed,
+                   tts_chunk_len, newline_mode, align_threshold, max_workers):
+    global aem_process, log_buffer
+
+    if aem_process and aem_process.poll() is None:
+        raise RuntimeError(f"AEM process [{Path(input_file).name}] is still running, please do not run again.")
+    
+    args = [
+        sys.executable, "main.py",
+        shlex.quote(str(input_file)),
+        "-d", shlex.quote(str(output_dir)) if output_dir else "",
+        "--log_level", log_level,
+        "--tts_engine", tts_engine.lower(),
+        "--tts_lang", tts_lang,
+        "--tts_voice", tts_voice or "",
+        "--tts_speed", str(tts_speed),
+        "--tts_chunk_len", str(tts_chunk_len),
+        "--newline_mode", newline_mode,
+        "--align_threshold", str(align_threshold),
+        "--max_workers", str(max_workers),
+        "--force"
+    ]
+    if cleanup:
+        args.append("--cleanup")
+    
+    aem_process = subprocess.Popen(args)
     pass
 
-langs_voices = {}
+ 
+def on_run_click(input_file, output_dir, log_level, cleanup,
+                 tts_engine, tts_lang, tts_voice, tts_speed,
+                 tts_chunk_len, newline_mode, align_threshold, max_workers):
+    # 检查 input_file, output_dir, tts_engine 必须不为空
+    # 然后调用 run_generation
+    global log_buffer
+    log_buffer.clear()
+    
+    if not input_file:
+        raise gr.Error(f"Select a EPUB file to process")
+        # return ("", gr.update(), gr.update())
+    if not tts_engine:
+        raise gr.Error(f"Select a TTS engine to continue")
+        # return ("", gr.update(), gr.update())
+    
+    print(f"input_file: {type(input_file)}, {input_file.name}, out: {type(output_dir)},{output_dir}, tts_engine: {type(tts_engine)},{tts_engine}")
+
+    try:
+        run_generation(
+            input_file=input_file.name,
+            output_dir=output_dir.strip(),
+            log_level=log_level,
+            cleanup=cleanup,
+            tts_engine=tts_engine,
+            tts_lang=tts_lang,
+            tts_voice=tts_voice,
+            tts_speed=tts_speed,
+            tts_chunk_len=tts_chunk_len,
+            newline_mode=newline_mode,
+            align_threshold=align_threshold,
+            max_workers=max_workers
+        )
+    except Exception as e:
+        raise gr.Error(f"{e}")
+
+
+def on_cancel_click():
+    global aem_process, log_buffer
+    
+    if aem_process and aem_process.poll() is None:
+        aem_process.terminate()
+        gr.Info(f"AEM process terminated")
+    else:
+        gr.Warning(f"No AEM process running")
+    
+
 def on_engine_change(tts_engine):
     global langs_voices
     tts_name = tts_engine.lower()
@@ -47,8 +134,8 @@ def on_engine_change(tts_engine):
             gr.Warning(message="Please set AZURE_TTS_KEY and AZURE_TTS_REGION in your environment",
                        title="Azure Key Unconfigured")
             return (
-                gr.update(),
-                gr.update()
+                gr.update(choices=[], value=None),
+                gr.update(choices=[], value=None)
             )
         try:
             langs_voices = helpers.get_langs_voices_azure(AZURE_TTS_KEY, AZURE_TTS_REGION)
@@ -56,8 +143,8 @@ def on_engine_change(tts_engine):
             gr.Warning(message=str(e),
                        title="Failed to load Azure voices")
             return (
-                gr.update(), 
-                gr.update()
+                gr.update(choices=[], value=None),
+                gr.update(choices=[], value=None)
             )
         
     elif tts_name == "kokoro":
@@ -74,7 +161,7 @@ def on_engine_change(tts_engine):
 
 
 def on_lang_change(tts_lang):
-    voices = langs_voices[tts_lang]
+    voices = langs_voices.get(tts_lang, [])
     return gr.update(choices=voices, value=voices[0] if voices else None)
 
 
@@ -85,7 +172,7 @@ def launch_gui():
 
         gr.Markdown("### ⚙️ General Settings")
         with gr.Row(equal_height=True):
-            input_file = gr.File(label="Select the EPUB file to process", 
+            input_file = gr.File(label="Select a EPUB file to process", 
                                     file_types=[".epub"], 
                                     file_count="single", 
                                     interactive=True
@@ -169,14 +256,28 @@ def launch_gui():
                                         )
 
         with gr.Row():
-            run_btn = gr.Button("🚀 Run", variant="primary")
-            cancel_btn = gr.Button("🛑 Cancel")
+            run_btn = gr.Button("🚀  Run", variant="primary")
+            cancel_btn = gr.Button("🛑  Cancel")
         
-        log_output = gr.Textbox(label="📝 Log Output", lines=20)
+        log_output = Log(log_file, tail=1, dark=True)
 
         input_file.change(fn=run_preview, inputs=input_file, outputs=preview_output)
         tts_engine.change(fn=on_engine_change, inputs=tts_engine, outputs=[tts_lang, tts_voice])
         tts_lang.change(fn=on_lang_change, inputs=tts_lang, outputs=tts_voice)
+        run_btn.click(
+            fn=on_run_click,
+            inputs=[
+                input_file, output_dir, log_level, cleanup,
+                tts_engine, tts_lang, tts_voice, tts_speed,
+                tts_chunk_len, newline_mode, align_threshold, max_workers
+            ],
+            outputs=None
+        )
+        cancel_btn.click(
+            fn=on_cancel_click,
+            inputs=None,
+            outputs=None
+        )
     
     demo.launch()
 

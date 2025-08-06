@@ -17,3 +17,4 @@ soundfile
 
 # Web GUI
 gradio
+gradio-log
