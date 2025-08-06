@@ -107,6 +107,8 @@ python web_gui.py
 
 Then open your browser and interact with the friendly interface!
 
+![Web GUI Screenshot](screenshot.png)
+
 ---
 
 ## 💾 Output
