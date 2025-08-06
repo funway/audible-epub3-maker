@@ -8,8 +8,7 @@ You can read or listen to the generated EPUB using any reader that supports EPUB
 
 ## ✨ Features
 
-- Convert plain-text EPUB books into human-like audiobooks.
-- Output conforms to **[EPUB 3 Media Overlays](https://www.w3.org/TR/epub/#sec-media-overlays)** specification.
+- Convert plain EPUB books into audiobooks compliant with **[EPUB 3 Media Overlays](https://www.w3.org/TR/epub/#sec-media-overlays)** specification.
 - Supports TTS engines:
   - Azure TTS (high-quality cloud service)
   - Kokoro-82M (offline open-source model)
