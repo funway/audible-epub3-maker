@@ -139,10 +139,12 @@ def run_generation(input_file, output_dir, log_level, cleanup,
 
 def check_process():
     if aem_process and aem_process.poll() is None:
-        # is running
+        # Child process is still running; show "Running" status and disable interaction
         return gr.update(value=BTN_RUN_RUNNING, interactive=False)
-    else:
-        return gr.update(value=BTN_RUN_IDLE, interactive=True)
+    elif aem_process:
+        # Child process has exited but not yet waited on (zombie); call wait() to clean up
+        aem_process.wait()
+    return gr.update(value=BTN_RUN_IDLE, interactive=True)
 
  
 def on_run_click(input_file, output_dir, log_level, cleanup,
