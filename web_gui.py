@@ -6,7 +6,6 @@ from pathlib import Path
 from urllib.parse import unquote
 
 import gradio as gr
-from gradio_log import Log
 
 from audible_epub3_maker.epub.epub_book import EpubBook
 from audible_epub3_maker.config import AZURE_TTS_KEY, AZURE_TTS_REGION
