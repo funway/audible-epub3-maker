@@ -26,4 +26,4 @@ COPY . .
 EXPOSE 7860
 
 # Define the default command to run when the container starts
-CMD [ "python3", "web_gui.py" ]
+CMD [ "python3", "web_gui.py", "--host", "0.0.0.0", "--port", "7860" ]
