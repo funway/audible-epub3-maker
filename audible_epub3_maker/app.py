@@ -1,4 +1,4 @@
-import logging, time, sys, signal
+import logging, time, sys, signal, atexit
 import psutil
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, Executor, as_completed
@@ -28,6 +28,7 @@ class App(object):
     def run(self):
         global executor
         setup_signal_handlers()
+        atexit.register(terminate_worker_processes)
 
         # 1. Load EPUB file
         book = EpubBook(settings.input_file)

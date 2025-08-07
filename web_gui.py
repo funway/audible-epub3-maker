@@ -131,6 +131,8 @@ def run_generation(input_file, output_dir, log_level, cleanup,
     if cleanup:
         args.append("--cleanup")
     
+    print(args)
+    
     aem_process = subprocess.Popen(args)
     pass
 
