@@ -119,7 +119,7 @@ def run_generation(input_file, output_dir, log_level, cleanup,
         "-d", str(output_dir) if output_dir else "",
         "--log_level", log_level,
         "--tts_engine", tts_engine.lower(),
-        "--tts_lang", tts_lang,
+        "--tts_lang", tts_lang or "",
         "--tts_voice", tts_voice or "",
         "--tts_speed", str(tts_speed),
         "--tts_chunk_len", str(tts_chunk_len),
@@ -155,6 +155,10 @@ def on_run_click(input_file, output_dir, log_level, cleanup,
     if not tts_engine:
         raise gr.Error(f"Select a TTS engine to continue")
         # return ("", gr.update(), gr.update())
+    if not tts_lang:
+        raise gr.Error(f"Select a TTS language to continue")
+    if not tts_voice:
+        raise gr.Error(f"Select a TTS voice to continue")
     
     try:
         run_generation(

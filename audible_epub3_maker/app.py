@@ -28,7 +28,7 @@ class App(object):
     def run(self):
         global executor
         setup_signal_handlers()
-        atexit.register(terminate_worker_processes)
+        # atexit.register(terminate_worker_processes)
 
         # 1. Load EPUB file
         book = EpubBook(settings.input_file)
@@ -83,7 +83,7 @@ class App(object):
                     success, task_result = future.result()
                 except Exception as e:
                     logger.exception(f"🛑 Unexpected executor-level error for task {idx}: {e}")
-                    raise e
+                    sys.exit(1)
 
                 if success:
                     logger.info(f"✅ [Task {idx}] complete. {task_result}")
