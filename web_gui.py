@@ -10,7 +10,7 @@ from gradio_log import Log
 
 from audible_epub3_maker.epub.epub_book import EpubBook
 from audible_epub3_maker.config import AZURE_TTS_KEY, AZURE_TTS_REGION
-from audible_epub3_maker.utils.constants import APP_NAME, APP_FULLNAME, OUTPUT, BEAUTIFULSOUP_PARSER, LOG_FILE
+from audible_epub3_maker.utils.constants import APP_NAME, APP_FULLNAME, OUTPUT_DIR, BEAUTIFULSOUP_PARSER, LOG_FILE
 from audible_epub3_maker.utils import helpers
 
 
@@ -245,7 +245,7 @@ def launch_gui():
             
             with gr.Column():
                 output_dir = gr.Textbox(label="Output Directory",
-                                        value=OUTPUT,
+                                        value=OUTPUT_DIR,
                                         interactive=True
                                         )
                 gr.Markdown("---")

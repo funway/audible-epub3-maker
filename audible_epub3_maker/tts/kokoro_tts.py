@@ -125,7 +125,7 @@ text = '''
 
 
 def main():
-    from audible_epub3_maker.utils.constants import DEV_OUTPUT
+    from audible_epub3_maker.utils.constants import DEV_OUTPUT_DIR
 
     pipeline = KPipeline(lang_code='a')
     generator = pipeline(text, voice='af_heart', speed=0.6)
@@ -147,9 +147,9 @@ def main():
         for token in tokens[:5]:
             logger.debug(f"token: {token}")
 
-        audio_chunk_file = DEV_OUTPUT / f'output{idx}.wav'
+        audio_chunk_file = DEV_OUTPUT_DIR / f'output{idx}.wav'
         if result.audio is not None:
-            sf.write(DEV_OUTPUT / f'output{idx}.wav', result.audio, 24000)
+            sf.write(DEV_OUTPUT_DIR / f'output{idx}.wav', result.audio, 24000)
         
         wbs = []            
         for token in tokens:
@@ -168,7 +168,7 @@ def main():
         pass
     
     merged_audio, merged_wbs = BaseTTS.merge_audios_and_word_boundaries(chunks)
-    BaseTTS.save_audio(merged_audio, DEV_OUTPUT / "output.mp3")
+    BaseTTS.save_audio(merged_audio, DEV_OUTPUT_DIR / "output.mp3")
 
     # from misaki import en
     # g2p = en.G2P()

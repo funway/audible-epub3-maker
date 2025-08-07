@@ -258,7 +258,7 @@ def main():
     # logger.info(f"output format: {speech_config.speech_synthesis_output_format_string}, {speech_config.output_format}")
     # speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3)
     # logger.info(f"output format: {speech_config.speech_synthesis_output_format_string}, {speech_config.output_format}")
-    audio_config = speechsdk.audio.AudioOutputConfig(filename=str(DEV_OUTPUT / "output.wav"))
+    audio_config = speechsdk.audio.AudioOutputConfig(filename=str(DEV_OUTPUT_DIR / "output.wav"))
     synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
 
     # === 创建事件回调函数 ===
@@ -372,11 +372,11 @@ def test():
 
     tts = AzureTTS()
 
-    wb_list = tts.html_to_speech(html, DEV_OUTPUT / "output.mp3", metadata={})
+    wb_list = tts.html_to_speech(html, DEV_OUTPUT_DIR / "output.mp3", metadata={})
     #   logger.debug(f"wb_list: {wb_list}")
     #   aligns = force_alignment(html, "span", wb_list)
     
-    wbs_file = DEV_OUTPUT / "output.wbs"
+    wbs_file = DEV_OUTPUT_DIR / "output.wbs"
     helpers.save_wbs_as_json(wb_list, wbs_file)
 
     soup = BeautifulSoup(html, BEAUTIFULSOUP_PARSER)
@@ -391,6 +391,6 @@ def test():
 
 
 if __name__ == "__main__":
-    from audible_epub3_maker.utils.constants import DEV_OUTPUT
+    from audible_epub3_maker.utils.constants import DEV_OUTPUT_DIR
     main()
     # test()

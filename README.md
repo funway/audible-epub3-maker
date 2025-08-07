@@ -2,7 +2,7 @@
 
 Generate audiobooks from plain EPUB files in **EPUB3 Media Overlays** format using high-quality TTS (Text-to-Speech) engines like **Azure** and **Kokoro**, now with an intuitive **Web GUI**.
 
-You can read or listen to the generated EPUB using any reader that supports EPUB 3 Media Overlays, such as Thorium Reader.
+You can read or listen to the generated EPUB using any ebook reader that supports EPUB 3 Media Overlays, such as Thorium Reader. The generated MP3 files can also be played with any standard audio player.
 
 ---
 

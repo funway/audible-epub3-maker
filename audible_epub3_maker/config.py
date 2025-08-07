@@ -3,7 +3,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 ## Configuration that can be modified by users via environment variables ##
-load_dotenv(override=False)  # Load the .env file into system env if it exists
+load_dotenv(override=False)  # Load variables from .env into os.environ if not already set
 
 AZURE_TTS_KEY = os.environ.get("AZURE_TTS_KEY", "")
 AZURE_TTS_REGION = os.environ.get("AZURE_TTS_REGION", "")
