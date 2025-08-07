@@ -49,14 +49,14 @@ def task_fn(payload: TaskPayload):
     Note:
         May raise exceptions. When used with multiprocessing, wrap with `task_fn_wrap` to catch errors safely.
     """
-    logger.debug(f"Task processing: {payload}")
+    logger.info(f"🎙️ [Task {payload.idx}] start processing: {payload}")
     original_html = payload.html_text
     audio_output_file = payload.audio_output_file
 
     # 1. TTS synthesis
     tts = create_tts_engine(settings.tts_engine)
     wb_list = tts.html_to_speech(original_html, audio_output_file)
-    logger.info(f"[Task {payload.idx}] 🔈 Generated audio: {audio_output_file}, Size: {helpers.format_bytes(audio_output_file.stat().st_size)}")
+    logger.info(f"🔈 [Task {payload.idx}] generated audio: {audio_output_file}, Size: {helpers.format_bytes(audio_output_file.stat().st_size)}")
 
     if not wb_list:
         raise NoWordBoundariesError("The TTS engine did not return any word boundaries. It may not support this feature.")
@@ -97,7 +97,7 @@ def task_fn_wrap(payload: TaskPayload):
         # return (True, test_fn(payload))
     
     except Exception as e:
-        logger.exception(f"⚠️ Task {payload.idx} failed during execution")
+        logger.exception(f"⚠️ [Task {payload.idx}] failed during execution")
         return (False, TaskErrorResult(
             error_type=type(e).__name__,
             error_msg=str(e),

@@ -123,4 +123,10 @@ This project is licensed under the MIT License.
 
 ---
 
+## 🚗 TODO
+- Improved sentence segmentation accuracy
+- Support for additional offline TTS engines
+- Integrate WhisperX to enable TTS engines without native word boundary output
+---
+
 

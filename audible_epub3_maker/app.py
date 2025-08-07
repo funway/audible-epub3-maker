@@ -41,7 +41,7 @@ class App(object):
             helpers.confirm_or_exit(msg)
 
         # 2. Prepare payloads for TTS and Forcealignment tasks
-        chapter_list = book.get_chapters()
+        chapter_list = [ch for ch in book.get_chapters() if ch.count_visible_chars() > 0]
         payload_list: list[TaskPayload] = []
         success_list: list[int] = []
         failed_list: list[int] = []
