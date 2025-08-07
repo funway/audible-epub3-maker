@@ -2,6 +2,7 @@ python-dotenv
 pytest
 pytest-html
 beautifulsoup4
+lxml
 requests
 pydub
 audioop-lts; python_version >= "3.13"
