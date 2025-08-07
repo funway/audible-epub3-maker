@@ -1,7 +1,7 @@
 import os
 import sys
 import subprocess
-import shlex
+import argparse
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -224,7 +224,7 @@ def on_lang_change(tts_lang):
     return gr.update(choices=voices, value=voices[0] if voices else None)
 
 
-def launch_gui():
+def launch_gui(host: str = "127.0.0.1", port: int = 7860):
     with gr.Blocks(theme=gr.themes.Ocean(), title=APP_NAME, css=CSS) as demo:
         gr.Markdown(f"# 🎧 {APP_FULLNAME} - Web GUI")
         gr.Markdown("---")
@@ -352,8 +352,14 @@ def launch_gui():
             outputs=[log_output]
         )
     
-    demo.launch()
+    demo.launch(server_name=host, server_port=port)
 
 
 if __name__ == "__main__":
-    launch_gui()
+    parser = argparse.ArgumentParser(description="Audible EPUB3 Maker Web GUI (powered by Gradio)",
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to bind the Gradio web server")
+    parser.add_argument("--port", type=int, default=7860, help="Port to bind the Gradio web server")
+    args = parser.parse_args()
+
+    launch_gui(host=args.host, port=args.port)
