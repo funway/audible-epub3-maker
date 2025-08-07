@@ -10,8 +10,8 @@ You can read or listen to the generated EPUB using any reader that supports EPUB
 
 - Convert plain EPUB books into audiobooks compliant with **[EPUB 3 Media Overlays](https://www.w3.org/TR/epub/#sec-media-overlays)** specification.
 - Supports TTS engines:
-  - Azure TTS (high-quality cloud service)
-  - Kokoro-82M (offline open-source model)
+  - [Azure TTS](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/get-started-text-to-speech) (high-quality cloud service)
+  - [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (offline open-source model)
 - Automatic sentence segmentation and force alignment
 - Parallel multi-process generation
 - Gradio-based Web GUI for easy interaction without command line
@@ -21,9 +21,9 @@ You can read or listen to the generated EPUB using any reader that supports EPUB
 ## 🛠 Installation
 
 ### ⚙️ From Source
-#### 1. pip install
+#### 1. git clone & pip install
 ```bash
-git clone https://github.com/<your-name>/audible-epub3-maker.git
+git clone https://github.com/funway/audible-epub3-maker.git 
 cd audible-epub3-maker
 pip install -r requirements.txt
 ```
@@ -42,9 +42,10 @@ Depending on the engine you plan to use, follow the steps below:
     - In a `.env` file in the project root (recommended)
     - Or `export` them manually in your shell or `.bashrc` / `.zshrc` file:
       ```bash
-      export AZURE_TTS_KEY=your_key
-      export AZURE_TTS_REGION=your_region
+      export AZURE_TTS_KEY=your_azure_speech_key
+      export AZURE_TTS_REGION=your_speech_region
       ```
+  - [How to get Microsoft Azure Text-to-Speech API key](https://docs.merkulov.design/how-to-get-microsoft-azure-tts-api-key/)
 
 - **Kokoro**:
   - No environment configuration is required.
@@ -124,8 +125,8 @@ This project is licensed under the MIT License.
 ---
 
 ## 🚗 TODO
-- Improved sentence segmentation accuracy
-- Support for additional offline TTS engines
+- Improve sentence segmentation accuracy
+- Support for more offline TTS engines
 - Integrate WhisperX to enable TTS engines without native word boundary output
 ---
 
