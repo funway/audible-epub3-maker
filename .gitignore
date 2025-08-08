@@ -13,6 +13,8 @@ logs/*
 !logs/.gitkeep
 
 .env
+docker-compose.yml
+
 .DS_Store
 report.html
 manual_test.py

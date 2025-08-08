@@ -191,11 +191,17 @@ def on_cancel_click():
     global aem_process
     
     if aem_process and aem_process.poll() is None:
-        aem_process.terminate()
-        aem_process = None
-        gr.Info(f"AEM process terminated")
+        try:
+            aem_process.terminate()
+            aem_process.wait(0.5)
+            gr.Info(f"AEM process terminated")
+        except subprocess.TimeoutExpired:
+            aem_process.kill()
+            gr.Warning(f"Force kill AEM process [{aem_process.pid}]")
+        except Exception as e:
+            raise gr.Error(f"Error terminating AEM process [{aem_process.pid}]")
     else:
-        gr.Warning(f"No AEM process running")
+        gr.Info(f"No AEM process running")
     
 
 def on_engine_change(tts_engine):
@@ -355,11 +361,12 @@ def launch_gui(host: str = "127.0.0.1", port: int = 7860):
             inputs=None,
             outputs=None
         )
+        # gr.Timer is triggered from the frontend browser
         gr.Timer(0.5).tick(
             fn=check_process,
             inputs=None,
             outputs=[run_btn]
-        )
+        ) 
         gr.Timer(0.5).tick(
             fn=tail_log_file,
             inputs=None,

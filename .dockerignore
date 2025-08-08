@@ -32,5 +32,6 @@ output/
 dev_output/
 
 .env
-.DS_Store
+docker-compose.yml
 
+.DS_Store
