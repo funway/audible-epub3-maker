@@ -15,7 +15,8 @@ You can read or listen to the generated EPUB using any ebook reader that support
 - Automatic sentence segmentation and force alignment
 - Parallel multi-process generation
 - Gradio-based Web GUI for easy interaction without command line
-- Docker-ready architecture for easy deployment (coming soon)
+- Docker-ready architecture for easy deployment
+
 ---
 
 ## 🛠 Installation
@@ -52,7 +53,51 @@ Depending on the engine you plan to use, follow the steps below:
   - The model file will automatically download on first use.
 
 
-### 🐳 From Docker (Comming Soon)
+### 🐳 From Docker
+We provide pre-built Docker images hosted at:
+
+- Docker Hub: `funway/audible-epub3-maker`
+
+- GitHub Container Registry (GHCR): `ghcr.io/funway/audible-epub3-maker`
+  
+The image includes all dependencies and runs the Web GUI by default.
+
+#### Using docker-compose
+
+A sample configuration file `docker-compose.example.yml` is included in the repository:
+
+```
+services:
+  aem-web:
+    image: funway/audible-epub3-maker  # or ghcr.io/funway/audible-epub3-maker
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./output:/app/output
+    environment:
+      - AZURE_TTS_KEY=your_azure_speech_key
+      - AZURE_TTS_REGION=your_speech_region
+    restart: unless-stopped
+```
+
+#### Using docker CLI 
+
+```
+docker pull funway/audible-epub3-maker
+
+docker run -d \
+    -p 7860:7860 \
+    -v ./output:/app/output \
+    -e AZURE_TTS_KEY=your_azure_speech_key \
+    -e AZURE_TTS_REGION=your_speech_region \
+    funway/audible-epub3-maker
+```
+
+### 💡 Notes
+
+- **Using Azure TTS?** Make sure you set the `AZURE_TTS_KEY` and `AZURE_TTS_REGION` environment variables before starting the container.
+
+- **Using Kokoro TTS?** Keep an eye on your system’s memory usage — the model runs locally and can consume several GB of RAM. On low-memory systems, this may cause OOM (out-of-memory) errors.
 
 ---
 
@@ -129,6 +174,7 @@ This project is licensed under the MIT License.
 - Improve sentence segmentation accuracy
 - Support for more offline TTS engines
 - Integrate WhisperX to enable TTS engines without native word boundary output
+  
 ---
 
 
