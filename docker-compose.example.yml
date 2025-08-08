@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  aem:
+    image: ghcr.io/funway/audible-epub3-maker  # or funway/audible-epub3-maker
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./output:/app/output
+    environment:
+      - AZURE_TTS_KEY=your_azure_speech_key
+      - AZURE_TTS_REGION=your_speech_region
+    restart: unless-stopped

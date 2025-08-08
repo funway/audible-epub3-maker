@@ -8,11 +8,11 @@ on:
         required: true            # User must provide a value before triggering
         default: 'latest'         # Default value if the user doesn't provide one
 
-  push:                 # Automatically trigger the workflow on push events
-    branches: [main]              # Trigger only when pushing to the 'main' branch
+  push:                 # Automatically trigger the workflow on push events, when `(branches and paths) or tags` == True
+    branches: [main]              # pushing to the 'main' branch
     tags:                         
-      - 'v*.*.*'                  # AND when pushing a tag matching the pattern vX.X.X (e.g., v1.2.3)
-    paths:                        # AND only if changes occur in these specified files or folders
+      - 'v*.*.*'                  # pushing a tag matching the pattern vX.X.X (e.g., v1.2.3)
+    paths:                        # changes occur in these specified files or folders
       - audible_epub3_maker/**
       - main.py
       - web_gui.py

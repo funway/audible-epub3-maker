@@ -1,0 +1,36 @@
+# Python 缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虚拟环境
+.venv/
+.venv_*/
+
+# Git 版本控制相关
+.git/
+.gitignore
+
+# IDE 和编辑器相关
+.vscode/
+.idea/
+*.swp
+
+# 测试相关
+tests/
+test/
+.pytest_cache/
+pytest.ini
+report.html
+manual_test.py
+
+# 日志文件
+*.log
+
+input/
+output/
+dev_output/
+
+.env
+.DS_Store
+

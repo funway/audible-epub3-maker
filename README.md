@@ -125,6 +125,7 @@ This project is licensed under the MIT License.
 ---
 
 ## 🚗 TODO
+- Fix bug: multi workers download model file at the same time (when first use).
 - Improve sentence segmentation accuracy
 - Support for more offline TTS engines
 - Integrate WhisperX to enable TTS engines without native word boundary output
