@@ -151,8 +151,11 @@ def main():
     # 5. Running application
     from audible_epub3_maker.app import App
     app = App()
-    app.run()
-    pass
+    try:
+        app.run()
+    except Exception as e:
+        logger.exception(f"🛑 [Exit] Unexpected Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-import logging, time, sys, signal, atexit
+import logging, time, sys, signal
 import psutil
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, Executor, as_completed
@@ -6,7 +6,7 @@ from concurrent.futures import ProcessPoolExecutor, Executor, as_completed
 from audible_epub3_maker.config import settings
 from audible_epub3_maker.utils import helpers
 from audible_epub3_maker.utils import logging_setup
-from audible_epub3_maker.utils.constants import BASE_DIR, APP_FULLNAME, AUDIO_MIMETYPES
+from audible_epub3_maker.utils.constants import APP_FULLNAME, AUDIO_MIMETYPES
 from audible_epub3_maker.utils.types import TaskPayload
 from audible_epub3_maker.epub.epub_book import EpubBook, EpubHTML, EpubAudio, LazyLoadFromFile, EpubSMIL
 from audible_epub3_maker.worker import init_worker, task_fn_wrap
@@ -28,7 +28,6 @@ class App(object):
     def run(self):
         global executor
         setup_signal_handlers()
-        # atexit.register(terminate_worker_processes)
 
         # 1. Load EPUB file
         book = EpubBook(settings.input_file)
@@ -79,11 +78,7 @@ class App(object):
             
             for future in as_completed(futures):
                 idx = future_to_idx[future]
-                try:
-                    success, task_result = future.result()
-                except Exception as e:
-                    logger.exception(f"🛑 Unexpected executor-level error for task {idx}: {e}")
-                    sys.exit(1)
+                success, task_result = future.result()  # May raise error
 
                 if success:
                     logger.info(f"✅ [Task {idx}] complete. {task_result}")
@@ -172,7 +167,7 @@ def handle_signal(signum, frame):
 
     if executor:
         executor.shutdown(wait=False, cancel_futures=True) 
-        # Cancel pending tasks and return immediately; running tasks still continue.
+        # Cancel pending tasks and return immediately (running tasks still continue)
         
     terminate_worker_processes()
     sys.exit(1)
