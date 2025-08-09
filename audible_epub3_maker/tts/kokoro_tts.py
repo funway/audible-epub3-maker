@@ -4,7 +4,6 @@ from pathlib import Path
 from kokoro import KPipeline
 from bs4 import BeautifulSoup
 
-from audible_epub3_maker.utils.logging_setup import setup_logging
 from audible_epub3_maker.tts.base_tts import BaseTTS
 from audible_epub3_maker.config import settings, in_dev
 from audible_epub3_maker.utils import helpers
@@ -21,6 +20,20 @@ class KokoroTTS(BaseTTS):
         
         pass
     
+    
+    @classmethod
+    def download_model(cls, lang: str, voice: str):
+        """
+        Preload the TTS model for given language and voice to trigger download dependency files and initialization.
+        """
+        pipeline = KPipeline(lang_code=lang)
+        generator = pipeline("test", voice=voice)
+        for result in generator:
+            # do nothing
+            pass
+        pass
+
+
     def html_to_speech(self, html_text: str, output_file: Path, metadata: dict|None = None) -> list[WordBoundary]:
         output_file = Path(output_file)
         metadata = metadata or {}
@@ -51,11 +64,8 @@ class KokoroTTS(BaseTTS):
         # TODO: chunking
 
         if in_dev():
-            html_file = output_file.with_suffix(".original_html.txt")
-            helpers.save_text(html_text, html_file)
-            
             text_file = output_file.with_suffix(".chunks.txt")
-            helpers.save_text(text, text_file)
+            text_file.write_text(text)
 
         # 剩下的就交给 Kokoro 好了，它自己会做 分句 与 chunking (不行，还是得自己做个 chunking)
         pipeline = KPipeline(lang_code=settings.tts_lang, repo_id="hexgrad/Kokoro-82M")
@@ -110,7 +120,6 @@ class KokoroTTS(BaseTTS):
             helpers.save_wbs_as_json(merged_wbs, wbs_file)
         
         return merged_wbs
-
 
 
 text = '''
@@ -235,6 +244,7 @@ def test2():
             logger.info(f"  ps (truncated): {len(ps)}| {ps}")
 
 if __name__ == "__main__":
-    main()
+    # main()
     # test2()
+    KokoroTTS.download_model('a', 'af_heart')
     

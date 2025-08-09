@@ -11,7 +11,7 @@ You can read or listen to the generated EPUB using any ebook reader that support
 - Convert plain EPUB books into audiobooks compliant with **[EPUB 3 Media Overlays](https://www.w3.org/TR/epub/#sec-media-overlays)** specification.
 - Supports TTS engines:
   - [Azure TTS](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/get-started-text-to-speech) (high-quality cloud service)
-  - [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (offline open-source model)
+  - [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (offline open-source model, currently supports English text alignment only)
 - Automatic sentence segmentation and force alignment
 - Parallel multi-process generation
 - Gradio-based Web GUI for easy interaction without command line
@@ -173,7 +173,6 @@ This project is licensed under the MIT License.
 ---
 
 ## 🚗 TODO
-- Fix: multiple workers downloading the offline model file simultaneously on first use
 - Add CPU/GPU selection for offline TTS models (note: pip install on amd64 arch defaults to pull a 4GB NVIDIA library (\"▔□▔) )
 - Support more TTS models
 - Implement voice preview and cost estimation for commercial models

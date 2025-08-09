@@ -368,6 +368,13 @@ def validate_settings():
     pass
 
 
+def ensure_model_downloaded(tts_engine: str, lang: str, voice: str):
+    from audible_epub3_maker.tts import create_tts_engine
+    tts = create_tts_engine(tts_engine)
+    tts.download_model(lang, voice)
+    pass
+
+
 def confirm_or_exit(msg: str):
     if settings.force:
         logger.debug(f"{msg} → [force-confirm] proceeding without prompt.")
@@ -469,10 +476,3 @@ def format_bytes(size_bytes: int) -> str:
             return f"{size:.2f} {unit}"
         size /= 1024
     return f"{size:.2f} PB"
-
-
-def save_text(text: str, file_path: Path, encoding: str = "utf-8"):
-    if not file_path.parent.exists():
-        raise FileNotFoundError(f"Directory does not exist: {file_path.parent}")
-    
-    file_path.write_text(text, encoding=encoding)

@@ -40,14 +40,17 @@ class App(object):
             )
             helpers.confirm_or_exit(msg)
 
-        # 2. Prepare payloads for TTS and Forcealignment tasks
+        # 2. Prepare payloads for TTS and Force Alignment tasks
         chapter_list = [ch for ch in book.get_chapters() if ch.count_visible_chars() > 0]
         payload_list: list[TaskPayload] = []
         success_list: list[int] = []
         failed_list: list[int] = []
+        tmp_dir = settings.output_dir / (settings.input_file.stem + "_tmp")
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+
         for idx, chapter in enumerate(chapter_list):
             chapter_filename = Path(chapter.href).stem  # filename, not real content Chapter
-            chapter_audio_output_file = settings.output_dir / f"{book.identifier}_aud{idx}.mp3"
+            chapter_audio_output_file = tmp_dir / f"aud{idx}.mp3"
             chapter_audio_metadata = {
                 "title": f"{book.title} - {chapter_filename}",
                 "album": book.epub_path.stem,
@@ -58,6 +61,9 @@ class App(object):
                                              audio_output_file=chapter_audio_output_file,
                                              audio_metadata=chapter_audio_metadata,
                                              ))
+        
+        # Ensure model files downloaded (if any) before multiprocessing dispatch
+        helpers.ensure_model_downloaded(settings.tts_engine, settings.tts_lang, settings.tts_voice)
         
         # 3. Dispatch tasks and wait for completion
         logger.info(f"🚀 Start processing [{settings.input_file.name}] ... (Total tasks: {len(payload_list)})")
@@ -131,8 +137,9 @@ class App(object):
 
         # 5. Cleanup
         if settings.cleanup:
-            for payload in payload_list:
-                payload.audio_output_file.unlink(missing_ok=True)    
+            import shutil
+            shutil.rmtree(tmp_dir)
+        
         pass
 
 

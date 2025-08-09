@@ -3,7 +3,8 @@ import psutil
 from bs4 import BeautifulSoup
 
 from audible_epub3_maker.config import settings, in_dev
-from audible_epub3_maker.utils import logging_setup, helpers
+from audible_epub3_maker.utils import helpers
+from audible_epub3_maker.utils import logging_setup
 from audible_epub3_maker.utils.types import TaskPayload, TaskResult, TaskErrorResult, NoWordBoundariesError
 from audible_epub3_maker.utils.constants import BEAUTIFULSOUP_PARSER, SEG_MARK_ATTR, SEG_TAG
 from audible_epub3_maker.tts import create_tts_engine
@@ -52,6 +53,9 @@ def task_fn(payload: TaskPayload):
     logger.info(f"🎙️ [Task {payload.idx}] start processing: {payload}")
     original_html = payload.html_text
     audio_output_file = payload.audio_output_file
+    
+    if in_dev():
+        audio_output_file.with_suffix(".original_html.txt").write_text(original_html)
 
     # 1. TTS synthesis
     tts = create_tts_engine(settings.tts_engine)
@@ -64,7 +68,7 @@ def task_fn(payload: TaskPayload):
     # 2. Parse HTML and segment by new tag.
     segmented_html = html_segment_and_wrap(original_html)
     if in_dev():
-        helpers.save_text(segmented_html, audio_output_file.with_suffix(".seg_html.txt"))
+        audio_output_file.with_suffix(".seg_html.txt").write_text(segmented_html)
     
     # 3. force alignment
     soup = BeautifulSoup(segmented_html, BEAUTIFULSOUP_PARSER)

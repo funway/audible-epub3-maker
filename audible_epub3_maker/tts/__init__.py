@@ -8,3 +8,6 @@ def create_tts_engine(tts_name: str):
     elif "kokoro" == tts_name:
         from audible_epub3_maker.tts.kokoro_tts import KokoroTTS
         return KokoroTTS()
+    
+    else:
+        raise ValueError(f"Unsupported TTS engine: {tts_name}")

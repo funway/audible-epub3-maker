@@ -14,8 +14,18 @@ class BaseTTS(object):
         super(BaseTTS, self).__init__()
         pass
 
+    
     def html_to_speech(html_text: str, output_file: str, metadata):
         raise NotImplementedError
+    
+    
+    @classmethod
+    def download_model(cls, lang: str, voice: str):
+        """
+        Optional hook for subclasses to download model files (if needed)
+        """
+        pass
+
     
     @classmethod
     def merge_audios_and_word_boundaries(cls, 

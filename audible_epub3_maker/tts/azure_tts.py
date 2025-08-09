@@ -194,12 +194,9 @@ class AzureTTS(BaseTTS):
         if not text_chunks:
             raise TTSEmptyContentError("Input HTML contains no valid text content.")
         if in_dev():
-            html_file = output_file.with_suffix(".original_html.txt")
-            helpers.save_text(html_text, html_file)
-            
             merged_texts = "\n\n##### chunk ######\n\n".join(text_chunks)
             text_file = output_file.with_suffix(".chunks.txt")
-            helpers.save_text(merged_texts, text_file)
+            text_file.write_text(merged_texts)
         
         # 2. tts
         chunk_results = []
