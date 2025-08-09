@@ -1,6 +1,6 @@
 services:
   aem-web:
-    image: funway/audible-epub3-maker  # or ghcr.io/funway/audible-epub3-maker
+    image: ghcr.io/funway/audible-epub3-maker
     ports:
       - "7860:7860"
     volumes:

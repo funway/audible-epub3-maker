@@ -69,7 +69,7 @@ A sample configuration file `docker-compose.example.yml` is included in the repo
 ```
 services:
   aem-web:
-    image: funway/audible-epub3-maker  # or ghcr.io/funway/audible-epub3-maker
+    image: ghcr.io/funway/audible-epub3-maker
     ports:
       - "7860:7860"
     volumes:
@@ -83,14 +83,14 @@ services:
 #### Using docker CLI 
 
 ```
-docker pull funway/audible-epub3-maker
+docker pull ghcr.io/funway/audible-epub3-maker
 
 docker run -d \
     -p 7860:7860 \
     -v ./output:/app/output \
     -e AZURE_TTS_KEY=your_azure_speech_key \
     -e AZURE_TTS_REGION=your_speech_region \
-    funway/audible-epub3-maker
+    ghcr.io/funway/audible-epub3-maker
 ```
 
 ### 💡 Notes
@@ -106,10 +106,7 @@ docker run -d \
 ### 🖥️ CLI
 
 ```bash
-python main.py <input_file.epub> -d <output_dir> \
-    --tts_engine azure \
-    --tts_lang en-US \
-    --tts_voice en-US-JennyMultilingualNeural
+python main.py <input_file.epub> [options]
 ```
 
 #### Required:
@@ -117,20 +114,20 @@ python main.py <input_file.epub> -d <output_dir> \
 
 #### Optional arguments:
 
-| Option                | Description                                                                                  |
-| --------------------- | -------------------------------------------------------------------------------------------- |
-| `-d`, `--output_dir`  | Output directory. Default: `<input_file_stem>_audible`                                       |
-| `--log_level`         | Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL. Default: INFO                          |
-| `--tts_engine`        | TTS engine: `azure` or `kokoro`. Default: azure                                              |
-| `--tts_lang`          | Language code. Default: `en-US` for Azure                                                    |
-| `--tts_voice`         | Voice name. Default: `en-US-AvaMultilingualNeural` (Azure)                                   |
-| `--tts_speed`         | Playback speed for TTS synthesis (e.g., 1.0 = normal speed). Default: 1.0                    |
-| `--tts_chunk_len`     | Max characters per TTS chunk. Default: auto (2000 for zh/ja/ko, 3000 for others)             |
-| `--newline_mode`      | How to detect paragraph breaks from newlines: `none`, `single`, or `multi`. Default: `multi` |
-| `-m`, `--max_workers` | Number of worker processes for multiprocessing. Default: 3                                   |
-| `--align_threshold`   | Fuzzy match threshold for force alignment (0–100). Default: 95.0                             |
-| `-f`, `--force`       | Force all prompts to be accepted (non-interactive mode)                                      |
-| `--cleanup`           | Remove temporary files (**.mp3**) after generation. Default: False                           |
+| Option                | Description                                      | Default                     |
+|-----------------------|--------------------------------------------------|-----------------------------|
+| `-d`, `--output_dir`  | Output directory                                 | `<input_file_stem>_audible` |
+| `--log_level`         | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) | INFO                     |
+| `--tts_engine`        | TTS engine (`azure` or `kokoro`)                 | azure                       |
+| `--tts_lang`          | Language code                                    | en-US                       |
+| `--tts_voice`         | Voice name                                       | en-US-AvaMultilingualNeural |
+| `--tts_speed`         | Playback speed (e.g., 1.0 = normal)              | 1.0                         |
+| `--tts_chunk_len`     | Max chars per TTS chunk                          | auto                        |
+| `--newline_mode`      | How to detect paragraph breaks from newlines (`none`, `single`, `multi`) | multi |
+| `-m`, `--max_workers` | Number of worker processes                       | 3                           |
+| `--align_threshold`   | Force alignment fuzzy match threshold (0–100)    | 95.0                        |
+| `-f`, `--force`       | Force all prompts (non-interactive mode)         | false                       |
+| `--cleanup`           | Remove temp files (.mp3) after generation        | false                       |
 
 #### Example
 
@@ -149,6 +146,11 @@ python main.py mybook.epub \
 ```bash
 python web_gui.py
 ```
+#### Optional arguments:
+| Argument       | Description                                               |
+| -------------- | --------------------------------------------------------- |
+| `--host HOST`  | Host to bind the Gradio web server (default: `127.0.0.1`) |
+| `--port PORT`  | Port to bind the Gradio web server (default: `7860`)      |
 
 Then open your browser and interact with the friendly interface!
 

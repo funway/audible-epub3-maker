@@ -18,6 +18,8 @@ RUN apt-get update && \
 COPY requirements.txt ./
 
 # Install Python dependencies
+# Note: On amd64 architecture, this step pulls in NVIDIA CUDA libraries (~4.1GB in ./nvidia),
+# which significantly increases the image size compared to arm64.
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the entire project into the container's WORKDIR
