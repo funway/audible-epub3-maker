@@ -2,7 +2,7 @@ from pathlib import Path
 ## Internal configuration (not intended for user modification) ##
 
 APP_NAME = "Audible EPUB3 Maker"
-APP_VERSION = "0.3.1"
+APP_VERSION = "0.3.2"
 APP_FULLNAME = APP_NAME + " v" + APP_VERSION
 APP_IN_DEV = True
 
