@@ -147,10 +147,11 @@ python main.py mybook.epub \
 python web_gui.py
 ```
 #### Optional arguments:
-| Argument       | Description                                               |
-| -------------- | --------------------------------------------------------- |
-| `--host HOST`  | Host to bind the Gradio web server (default: `127.0.0.1`) |
-| `--port PORT`  | Port to bind the Gradio web server (default: `7860`)      |
+
+| Argument   | Description                         | Default       |
+| ---------- | ----------------------------------- | ------------- |
+| `--host`   | Host to bind the Gradio web server  | `127.0.0.1`   |
+| `--port`   | Port to bind the Gradio web server  | `7860`        |
 
 Then open your browser and interact with the friendly interface!
 
@@ -172,10 +173,11 @@ This project is licensed under the MIT License.
 ---
 
 ## 🚗 TODO
-- Fix bug: multi workers download model file at the same time (when first use).
-- Improve sentence segmentation accuracy
-- Support for more offline TTS engines
-- Integrate WhisperX to enable TTS engines without native word boundary output
+- Fix: multiple workers downloading the offline model file simultaneously on first use
+- Add CPU/GPU selection for offline TTS models (note: pip install on amd64 arch defaults to pull a 4GB NVIDIA library (\"▔□▔) )
+- Support more TTS models
+- Implement voice preview and cost estimation for commercial models
+- Integrate WhisperX for audio-text alignment in TTS models without native word boundary output
   
 ---
 
