@@ -119,8 +119,8 @@ python main.py <input_file.epub> [options]
 | `-d`, `--output_dir`  | Output directory                                 | `<input_file_stem>_audible` |
 | `--log_level`         | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) | INFO                     |
 | `--tts_engine`        | TTS engine (`azure` or `kokoro`)                 | azure                       |
-| `--tts_lang`          | Language code                                    | en-US                       |
-| `--tts_voice`         | Voice name                                       | en-US-AvaMultilingualNeural |
+| `--tts_lang`          | Language code                                    | azure → en-US; <br/>kokoro → first supported |
+| `--tts_voice`         | Voice name                                       | azure → en-US-AvaMultilingualNeural; <br/>kokoro → first voice for language |
 | `--tts_speed`         | Playback speed (e.g., 1.0 = normal)              | 1.0                         |
 | `--tts_chunk_len`     | Max chars per TTS chunk                          | auto                        |
 | `--newline_mode`      | How to detect paragraph breaks from newlines (`none`, `single`, `multi`) | multi |

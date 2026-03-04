@@ -54,15 +54,24 @@ def parse_args():
     # 5. TTS 语言
     parser.add_argument(
         "--tts_lang",
-        default="en-US",
-        help="Language code for TTS (default: en-US for Azure)"
+        default=None,
+        help=(
+            "Language code for TTS. The default depends on the chosen engine:\n"
+            "  * azure => en-US\n"
+            "  * kokoro => en-US if available otherwise the first supported code\n"
+            "You only need to specify this when you want to override the engine default."
+        )
     )
 
     # 6. TTS 声音
     parser.add_argument(
         "--tts_voice",
-        default="en-US-AvaMultilingualNeural",
-        help="Voice name for TTS (default: en-US-AvaMultilingualNeural for Azure)"
+        default=None,
+        help=(
+            "Voice name for TTS. Default is engine-specific:\n"
+            "  * azure => en-US-AvaMultilingualNeural\n"
+            "  * kokoro => first voice matching the language default\n"
+            "(leave blank to pick the engine default)")
     )
 
     parser.add_argument(
@@ -125,6 +134,36 @@ def parse_args():
     return parser.parse_args()
 
 
+def apply_tts_defaults(args: dict) -> dict:
+    """Return a new args dict with tts defaults filled in.
+
+    The values are chosen based on ``tts_engine``.  This mirrors the
+    very similar logic in :func:`web_gui.on_engine_change` so that CLI users
+    don't have to remember Azure-specific defaults when switching to Kokoro.
+    """
+    from audible_epub3_maker.utils import helpers
+
+    engine = args.get("tts_engine", "azure").lower()
+    out = dict(args)  # copy so caller can still mutate the original
+
+    if engine == "kokoro":
+        langs_voices = helpers.get_langs_voices_kokoro()
+        lang_choices = list(langs_voices.keys())
+        default_lang = "en-US" if "en-US" in lang_choices else next(iter(lang_choices), None)
+        if not out.get("tts_lang"):
+            out["tts_lang"] = default_lang
+        voices = langs_voices.get(out.get("tts_lang"), [])
+        if not out.get("tts_voice") and voices:
+            out["tts_voice"] = voices[0]
+    else:
+        if not out.get("tts_lang"):
+            out["tts_lang"] = "en-US"
+        if not out.get("tts_voice"):
+            out["tts_voice"] = "en-US-AvaMultilingualNeural"
+
+    return out
+
+
 def main():
     # 1. Set multiprocessing mode
     mp.set_start_method("spawn")
@@ -132,6 +171,10 @@ def main():
     # 2. Read user settings from command line args
     from audible_epub3_maker.config import settings
     args = vars(parse_args())
+
+    # fill in any missing language/voice parameters based on selected engine
+    args = apply_tts_defaults(args)
+
     settings.update(args)
     
     # 3. Setup logging system
