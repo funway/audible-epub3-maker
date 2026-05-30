@@ -117,6 +117,8 @@ python main.py <input_file.epub> [options]
 | Option                | Description                                      | Default                     |
 |-----------------------|--------------------------------------------------|-----------------------------|
 | `-d`, `--output_dir`  | Output directory                                 | `<input_file_stem>_audible` |
+| `-o`, `--output_filename` | Generated EPUB filename                      | original input filename     |
+| `--title_suffix`      | Suffix appended to the OPF `dc:title`            | empty                       |
 | `--log_level`         | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) | INFO                     |
 | `--tts_engine`        | TTS engine (`azure` or `kokoro`)                 | azure                       |
 | `--tts_lang`          | Language code                                    | azure → en-US; <br/>kokoro → first supported |
@@ -179,5 +181,3 @@ This project is licensed under the MIT License.
 - Integrate WhisperX for audio-text alignment in TTS models without native word boundary output
   
 ---
-
-

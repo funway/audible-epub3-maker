@@ -40,6 +40,11 @@ class App(object):
             )
             helpers.confirm_or_exit(msg)
 
+        # Optional: Decide output title
+        if settings.title_suffix:
+            book.append_title_suffix(settings.title_suffix)
+        epub_output_path = settings.output_path
+
         # 2. Prepare payloads for TTS and Force Alignment tasks
         chapter_list = [ch for ch in book.get_chapters() if ch.count_visible_chars() > 0]
         payload_list: list[TaskPayload] = []
@@ -131,7 +136,6 @@ class App(object):
             logger.warning("😔 Oops! All tasks failed - no EPUB could be created.")
         else:
             # Save EPUB
-            epub_output_path = settings.output_dir / settings.input_file.name
             book.save_epub(epub_output_path)
             logger.info(f"💾 EPUB saved to {epub_output_path}")
 

@@ -43,6 +43,9 @@ class UserSettings:
 
         self.newline_mode: str = "multi"
 
+        self.output_filename: str = ""
+        self.title_suffix: str = ""
+
         self.cleanup: bool = False
         pass
     
@@ -55,6 +58,33 @@ class UserSettings:
             self.output_dir = self.input_file.parent / (self.input_file.stem + "_audible")
 
         pass
+
+    def get_output_filename(self) -> str:
+        if self.input_file is None:
+            raise ValueError("input_file is required")
+
+        filename = (self.output_filename or "").strip()
+        if not filename:
+            return self.input_file.name
+
+        output_path = Path(filename)
+        if output_path.name != filename:
+            raise ValueError("--output_filename must be a filename, not a path")
+
+        if not output_path.suffix:
+            return f"{filename}{self.input_file.suffix}"
+
+        if output_path.suffix.lower() != self.input_file.suffix.lower():
+            raise ValueError(f"--output_filename must use {self.input_file.suffix} extension")
+
+        return filename
+
+    @property
+    def output_path(self) -> Path:
+        if self.output_dir is None:
+            raise ValueError("output_dir is required")
+
+        return self.output_dir / self.get_output_filename()
 
     def to_dict(self) -> dict:
         """Export current settings as a dictionary."""

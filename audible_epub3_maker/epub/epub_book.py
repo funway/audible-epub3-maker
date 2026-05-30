@@ -272,6 +272,27 @@ class EpubBook:
         target_item.attrs["media-overlay"] = item.id
         pass
 
+    def append_title_suffix(self, suffix: str):
+        title = (self.title or "").rstrip()
+        if not title:
+            raise EpubContentError("Missing required metadata: dc:title")
+        
+        suffix = (suffix or "").strip()
+        if not suffix:
+            return
+
+        title_elem = self.metadata.find("dc:title", namespaces=NAMESPACES)
+        if title_elem is None:
+            raise EpubContentError("Missing required metadata: dc:title")
+        
+        if title.endswith(suffix):
+            return
+
+        new_title = f"{title} {suffix}"
+        self.title = new_title
+        title_elem.text = new_title
+        pass
+
     def _read_required_metadata(self):
         metadata = self.metadata
         if metadata is None:

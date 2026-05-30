@@ -28,6 +28,18 @@ def parse_args():
         help="Output directory (default: <input_file>_audible)"
     )
 
+    parser.add_argument(
+        "-o", "--output_filename",
+        default="",
+        help="Generated EPUB filename (default: original input filename)."
+    )
+
+    parser.add_argument(
+        "--title_suffix",
+        default="",
+        help="Suffix appended to the OPF dc:title (e.g. 'by AEM')."
+    )
+
     # 3. 日志等级
     parser.add_argument(
         "--log_level",
