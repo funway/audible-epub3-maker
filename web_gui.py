@@ -107,7 +107,7 @@ def run_preview(input_file):
     return "\n".join(preview)
 
 
-def run_generation(input_file, output_dir, log_level, cleanup,
+def run_generation(input_file, output_dir, output_filename, title_suffix, log_level, cleanup,
                    tts_engine, tts_lang, tts_voice, tts_speed,
                    tts_chunk_len, newline_mode, align_threshold, max_workers):
     global aem_process
@@ -119,6 +119,8 @@ def run_generation(input_file, output_dir, log_level, cleanup,
         sys.executable, "main.py",
         str(input_file),
         "-d", str(output_dir) if output_dir else "",
+        "-o", output_filename or "",
+        "--title_suffix", title_suffix or "",
         "--log_level", log_level,
         "--tts_engine", tts_engine.lower(),
         "--tts_lang", tts_lang or "",
@@ -153,7 +155,7 @@ def check_process():
     return gr.update(value=BTN_RUN_IDLE, interactive=True)
 
  
-def on_run_click(input_file, output_dir, log_level, cleanup,
+def on_run_click(input_file, output_dir, output_filename, title_suffix, log_level, cleanup,
                  tts_engine, tts_lang, tts_voice, tts_speed,
                  tts_chunk_len, newline_mode, align_threshold, max_workers):
     # 检查 input_file, output_dir, tts_engine 必须不为空
@@ -172,6 +174,8 @@ def on_run_click(input_file, output_dir, log_level, cleanup,
         run_generation(
             input_file=input_file.name,
             output_dir=output_dir.strip(),
+            output_filename=output_filename.strip(),
+            title_suffix=title_suffix.strip(),
             log_level=log_level,
             cleanup=cleanup,
             tts_engine=tts_engine,
@@ -267,6 +271,14 @@ def launch_gui(host: str = "127.0.0.1", port: int = 7860):
                                         value=OUTPUT_DIR,
                                         interactive=True
                                         )
+                output_filename = gr.Textbox(label="Output Filename",
+                                             placeholder="Leave blank to use original filename",
+                                             interactive=True
+                                             )
+                title_suffix = gr.Textbox(label="Title Suffix",
+                                          placeholder="e.g. by AEM",
+                                          interactive=True
+                                          )
                 gr.Markdown("---")
                 
                 log_level = gr.Dropdown(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], 
@@ -350,7 +362,7 @@ def launch_gui(host: str = "127.0.0.1", port: int = 7860):
         run_btn.click(
             fn=on_run_click,
             inputs=[
-                input_file, output_dir, log_level, cleanup,
+                input_file, output_dir, output_filename, title_suffix, log_level, cleanup,
                 tts_engine, tts_lang, tts_voice, tts_speed,
                 tts_chunk_len, newline_mode, align_threshold, max_workers
             ],

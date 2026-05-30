@@ -339,7 +339,7 @@ class EpubBook:
                 raise EpubStructureError("No <manifest> found in opf")
             
             manifest_items = {}
-            for item_elem in manifest_elem:
+            for item_elem in manifest_elem.findall("opf:item", namespaces=NAMESPACES):
                 href = item_elem.attrib["href"]
                 zip_relpath = self.to_zip_relpath(href)
                 manifest_items[zip_relpath] = item_elem
