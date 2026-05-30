@@ -426,18 +426,18 @@ def generate_smil_content(smil_href: str, xhtml_href: str, audio_href: str, alig
     Returns:
         str: A string of SMIL XML content.
     """
+    smil_dir = Path(smil_href).parent
+    xhtml_rel = os.path.relpath(xhtml_href, start=smil_dir)
+    audio_rel = os.path.relpath(audio_href, start=smil_dir)
+    
     smil_lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<smil xmlns="http://www.w3.org/ns/SMIL" xmlns:epub="http://www.idpf.org/2007/ops" version="3.0">',
         '  <body>',
-        '    <seq>'
+        f'    <seq id="seq1" epub:textref="{escape(xhtml_rel)}" epub:type="chapter">'
     ]
 
     for idx, align in enumerate(alignments, start=1):
-        smil_dir = Path(smil_href).parent
-        xhtml_rel = os.path.relpath(xhtml_href, start=smil_dir)
-        audio_rel = os.path.relpath(audio_href, start=smil_dir)
-        
         text_src   = f"{escape(xhtml_rel)}#{escape(align.tag_id)}"
         audio_src  = escape(audio_rel)
         clip_begin = format_smil_time(align.start_ms)
