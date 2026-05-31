@@ -22,10 +22,20 @@ from audible_epub3_maker.utils import helpers
 # use `gr.State()` within your Gradio app to store and manage session-specific data.
 
 CSS = """
-#adv_sets > button > span:first-of-type {
-    font-size: var(--text-lg);
-    font-weight: var(--prose-header-text-weight);
-    color: var(--body-text-color);
+#preview-output,
+#log-output {
+    background-color: #242b2d;
+}
+
+#preview-output span,
+#log-output span {
+    color: #8ec07c;
+}
+
+#preview-output textarea, 
+#log-output textarea {
+    background-color: rgb(28 33 33 / 90%);
+    color: #ebdbb2;
 }
 """
 BTN_RUN_IDLE = "🚀  Run"
@@ -249,111 +259,129 @@ def on_lang_change(tts_lang):
 
 
 def launch_gui(host: str = "127.0.0.1", port: int = 7860):
-    with gr.Blocks(theme=gr.themes.Ocean(), title=APP_NAME, css=CSS) as demo:
+    with gr.Blocks(theme=gr.themes.Base(), title=APP_NAME, css=CSS) as demo:
         gr.Markdown(f"# 🎧 {APP_FULLNAME} - Web GUI")
         gr.Markdown("---")
 
-        gr.Markdown("### ⚙️ General Settings")
-        with gr.Row(equal_height=True):
-            input_file = gr.File(label="Select a EPUB file to process", 
-                                    file_types=[".epub"], 
-                                    file_count="single", 
-                                    interactive=True
-                                    )
+        with gr.Row(equal_height=False):
+            with gr.Column(scale=1, min_width=600, elem_id="left-panel"):
+                # General settings
+                with gr.Accordion("⚙️ General Settings", open=True, elem_id="gen_sets"):
+                    with gr.Row(equal_height=True):
+                        with gr.Column(min_width=160):
+                            input_file = gr.File(label="Select a EPUB file to process",
+                                                 file_types=[".epub"], 
+                                                 file_count="single",
+                                                 interactive=True
+                                                 )
+                        
+                        with gr.Column(min_width=160):
+                            output_dir = gr.Textbox(label="Output Directory",
+                                                    value=OUTPUT_DIR,
+                                                    interactive=True
+                                                    )
+                            output_filename = gr.Textbox(label="Output Filename",
+                                                        placeholder="Leave blank to use original filename",
+                                                        interactive=True
+                                                        )
+                            title_suffix = gr.Textbox(label="Output Title Suffix",
+                                                    placeholder="e.g. by AEM",
+                                                    interactive=True
+                                                    )
 
-            preview_output = gr.Textbox(label="EPUB Preview", 
-                                        lines=10,
-                                        max_lines=10,
-                                        )
-            
-            with gr.Column():
-                output_dir = gr.Textbox(label="Output Directory",
-                                        value=OUTPUT_DIR,
-                                        interactive=True
-                                        )
-                output_filename = gr.Textbox(label="Output Filename",
-                                             placeholder="Leave blank to use original filename",
-                                             interactive=True
-                                             )
-                title_suffix = gr.Textbox(label="Title Suffix",
-                                          placeholder="e.g. by AEM",
-                                          interactive=True
-                                          )
-                gr.Markdown("---")
+                    with gr.Row(equal_height=True):
+                        with gr.Column(min_width=160):
+                            log_level = gr.Dropdown(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                                                    value="INFO", 
+                                                    label="Log Level",
+                                                    show_label=True,
+                                                    interactive=True,
+                                                    )
+                        with gr.Column(min_width=160):
+                            cleanup = gr.Checkbox(label="Check to delete temporary files after processing",
+                                                  info="Cleanup",
+                                                  )
                 
-                log_level = gr.Dropdown(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], 
-                                        value="INFO", 
-                                        label="Log Level",
-                                        interactive=True
-                                        )
-                gr.Markdown("---")
-                cleanup = gr.Checkbox(label="Cleanup Temporary Files")
+                # TTS settings
+                with gr.Accordion("🎙 TTS Settings", open=True, elem_id="tts_sets"):
+                    with gr.Row(equal_height=True):
+                        tts_engine = gr.Dropdown(choices=["Azure", "Kokoro"],
+                                                label="TTS Engine",
+                                                value=None,
+                                                interactive=True
+                                                )
+                        
+                        tts_lang = gr.Dropdown(choices=[], 
+                                            label="Language",
+                                            interactive=True
+                                            )
+                        
+                        tts_voice = gr.Dropdown(choices=[],
+                                                label="Voice",
+                                                interactive=True
+                                                )
+                        
+                        tts_speed = gr.Slider(0.5, 2.0, 
+                                            step=0.1, 
+                                            value=1.0, 
+                                            label="Speed",
+                                            interactive=True
+                                            )
 
-        gr.Markdown("### 🎙 TTS Settings")
-        with gr.Row(equal_height=True):
-            tts_engine = gr.Dropdown(choices=["Azure", "Kokoro"],
-                                     label="TTS Engine",
-                                     value=None,
-                                     interactive=True
-                                     )
+                # Advanced settings
+                with gr.Accordion("🛠 Advanced Settings", open=True, elem_id="adv_sets"):
+                    with gr.Row(equal_height=True):
+                        with gr.Column(min_width=160):
+                            newline_mode = gr.Dropdown(["none", "single", "multi"], 
+                                            value="multi", 
+                                            label="Newline Mode",
+                                            info="Choose the mode of detecting new paragraphs for TTS",
+                                            interactive=True
+                                            )
+                        with gr.Column(min_width=160):
+                            tts_chunk_len = gr.Number(value=0, 
+                                                label="Chunk Length (0 = auto)",
+                                                info="Set the max characters per TTS request (0 = auto by language)",
+                                                interactive=True
+                                                )
+                    with gr.Row(equal_height=True):
+                        with gr.Column(min_width=160):
+                            align_threshold = gr.Slider(80.0, 100.0, 
+                                                    step=0.5, 
+                                                    value=95.0, 
+                                                    label="Force Alignment Threshold",
+                                                    info="Set the threshold for force alignment fuzzy matching",
+                                                    interactive=True)
+                        with gr.Column(min_width=160):
+                            max_workers = gr.Slider(1, 16, 
+                                                step=1, 
+                                                value=3, 
+                                                label="Max Workers",
+                                                info="Set the max number of parallel worker processes",
+                                                interactive=True
+                                                )
             
-            tts_lang = gr.Dropdown(choices=[], 
-                                   label="Language",
-                                   interactive=True
-                                   )
-            
-            tts_voice = gr.Dropdown(choices=[],
-                                    label="Voice",
-                                    interactive=True
-                                    )
-            
-            tts_speed = gr.Slider(0.5, 2.0, 
-                                  step=0.1, 
-                                  value=1.0, 
-                                  label="Speed",
-                                  interactive=True
-                                  )
-            
-        with gr.Accordion("🛠 Advanced Settings", open=False, elem_id="adv_sets"):
-            with gr.Row():
-                with gr.Column():
-                    newline_mode = gr.Dropdown(["none", "single", "multi"], 
-                                       value="multi", 
-                                       label="Newline Mode",
-                                       info="Choose the mode of detecting new paragraphs for TTS",
-                                       interactive=True
-                                       )
-                with gr.Column():
-                    tts_chunk_len = gr.Number(value=0, 
-                                        label="Chunk Length (0 = auto)",
-                                        info="Set the max characters per TTS request (0 = auto by language)",
-                                        interactive=True
-                                        )
-                    
-                with gr.Column():
-                    align_threshold = gr.Slider(80.0, 100.0, 
-                                            step=0.5, 
-                                            value=95.0, 
-                                            label="Force Alignment Threshold",
-                                            info="Set the threshold for force alignment fuzzy matching",
-                                            interactive=True)
-                with gr.Column():
-                    max_workers = gr.Slider(1, 16, 
-                                        step=1, 
-                                        value=3, 
-                                        label="Max Workers",
-                                        info="Set the max number of parallel worker processes",
-                                        interactive=True
-                                        )
-
-        with gr.Row():
-            run_btn = gr.Button(BTN_RUN_IDLE, variant="primary")
-            cancel_btn = gr.Button(BTN_CANCEL)
-        
-        log_output = gr.Textbox(label="Log Output", 
-                                lines=20,
-                                max_lines=20,
-                                interactive=False)
+            with gr.Column(scale=1, elem_id="right-panel"):
+                with gr.Row():
+                    preview_output = gr.Textbox(label="EPUB Preview", 
+                                                    lines=10,
+                                                    max_lines=10,
+                                                    interactive=False,
+                                                    elem_id="preview-output",
+                                                    )
+                # Run / Cancel buttons
+                with gr.Row():
+                    run_btn = gr.Button(BTN_RUN_IDLE, variant="primary")
+                    cancel_btn = gr.Button(BTN_CANCEL)
+                
+                # Log output
+                with gr.Row():
+                    log_output = gr.Textbox(label="Log Output", 
+                                            lines=20,
+                                            interactive=False,
+                                            elem_id="log-output",
+                                            )
+            pass
 
         # Events
         input_file.change(fn=run_preview, inputs=input_file, outputs=preview_output)
